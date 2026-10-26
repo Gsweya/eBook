@@ -38,6 +38,7 @@ import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.rounded.Add
+import androidx.compose.material.icons.rounded.AddReaction
 import androidx.compose.material.icons.rounded.AutoAwesome
 import androidx.compose.material.icons.rounded.Palette
 import androidx.compose.material.icons.rounded.Settings
@@ -190,6 +191,10 @@ private fun LibraryTab(vm: AppViewModel, nav: Nav, onImport: () -> Unit, onScrol
     val books = remember(data.books) { data.books.sortedByDescending { maxOf(it.lastOpenedAt, it.addedAt) } }
     val current = books.firstOrNull { it.lastOpenedAt > 0 }
     val grid = rememberLazyGridState()
+    var showActivity by remember { mutableStateOf(false) }
+    if (showActivity) ReadingActivitySheet(
+        vm, onOpen = { b -> showActivity = false; vm.markOpened(b.id); nav.open(b) }, onDismiss = { showActivity = false },
+    )
     ScrollDirection(grid.firstVisibleItemIndex, grid.firstVisibleItemScrollOffset, onScrollDir)
 
     LazyVerticalGrid(
@@ -206,7 +211,7 @@ private fun LibraryTab(vm: AppViewModel, nav: Nav, onImport: () -> Unit, onScrol
             }
         }
         item(span = { GridItemSpan(3) }) {
-            ReadingStatsCard(data.readingLog, data.books.sumOf { it.readingMs })
+            ReadingStatsCard(data.readingLog, data.books.sumOf { it.readingMs }, onClick = { showActivity = true })
         }
         if (current != null) {
             item(span = { GridItemSpan(3) }) {
@@ -343,6 +348,22 @@ private fun HighlightRow(vm: AppViewModel, h: Highlight, book: Book, nav: Nav) {
         Column(Modifier.weight(1f)) {
             Text("“${h.text}”", fontFamily = QuoteSerif, fontSize = 17.sp, lineHeight = 24.sp, color = g.text, maxLines = 6, overflow = TextOverflow.Ellipsis)
             if (!h.note.isNullOrBlank()) Text(h.note, style = GType.secondary, color = g.text2, modifier = Modifier.padding(top = 6.dp))
+        }
+        // Reaction: shows the chosen emoji, or an add-reaction button; tap to pick.
+        var picking by remember { mutableStateOf(false) }
+        Box(Modifier.padding(start = 8.dp)) {
+            Box(
+                Modifier.size(36.dp).clip(CircleShape).background(if (h.reaction != null) g.accent.copy(alpha = 0.15f) else g.fill)
+                    .clickable { picking = true },
+                contentAlignment = Alignment.Center,
+            ) {
+                if (h.reaction != null) Text(h.reaction, fontSize = 18.sp)
+                else Icon(Icons.Rounded.AddReaction, "React", tint = g.text2, modifier = Modifier.size(20.dp))
+            }
+            if (picking) ReactionPicker(
+                onPick = { vm.reactHighlight(h.id, it); picking = false }, onDismiss = { picking = false },
+                alignment = Alignment.BottomEnd, offsetY = -120,
+            )
         }
     }
 }

@@ -232,8 +232,8 @@ private fun ActionIcon(icon: androidx.compose.ui.graphics.vector.ImageVector, de
 }
 
 @Composable
-fun ReactionPicker(onPick: (String) -> Unit, onDismiss: () -> Unit) {
-    Popup(alignment = Alignment.BottomStart, offset = androidx.compose.ui.unit.IntOffset(0, -140), onDismissRequest = onDismiss) {
+fun ReactionPicker(onPick: (String) -> Unit, onDismiss: () -> Unit, alignment: Alignment = Alignment.BottomStart, offsetY: Int = -140) {
+    Popup(alignment = alignment, offset = androidx.compose.ui.unit.IntOffset(0, offsetY), onDismissRequest = onDismiss) {
         Row(Modifier.panel(CircleShape).padding(horizontal = 8.dp, vertical = 4.dp)) {
             ReactionEmojis.forEach { e ->
                 Text(e, fontSize = 28.sp, modifier = Modifier.clip(CircleShape).clickable { onPick(e) }.padding(8.dp))

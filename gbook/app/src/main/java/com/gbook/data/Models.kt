@@ -54,6 +54,8 @@ data class Highlight(
     val endBlock: Int = -1,
     /** 0 filled marker, 1 underline. */
     val style: Int = 0,
+    /** Emoji reaction from [ReactionEmojis], or null. */
+    val reaction: String? = null,
 ) {
     val lastBlock get() = if (endBlock < 0) block else endBlock
 
@@ -125,6 +127,8 @@ data class LibraryData(
     val lastBackupAt: Long = 0,
     /** Active reading time per local day ("yyyy-MM-dd"), across all books. */
     val readingLog: Map<String, Long> = emptyMap(),
+    /** Active reading time per local day, per book id. */
+    val bookDays: Map<String, Map<String, Long>> = emptyMap(),
 )
 
 @Serializable

@@ -1,6 +1,9 @@
 package com.gbook.ui.screens
 
 import androidx.compose.animation.AnimatedVisibility
+import androidx.compose.ui.text.drawText
+import androidx.compose.ui.text.rememberTextMeasurer
+import com.gbook.data.ReactionEmojis
 import androidx.compose.material.icons.rounded.BorderColor
 import androidx.compose.material.icons.rounded.FormatUnderlined
 import androidx.compose.ui.graphics.drawscope.DrawScope
@@ -506,6 +509,7 @@ private fun ReaderContent(
                             Paragraph(
                                 text = b.text, style = body, ref = ref,
                                 highlights = hls.map { Triple(it.rangeIn(i, b.text.length), it.color, it.style) },
+                                reactions = hls.mapNotNull { h -> h.reaction?.takeIf { h.lastBlock == i }?.let { h.rangeIn(i, b.text.length).last to it } },
                                 selection = sel?.rangeIn(i, b.text.length),
                                 searchTerm = searchTerm,
                                 onTap = { off ->
@@ -636,9 +640,18 @@ private fun ReaderContent(
                     if (existing != null) { vm.updateHighlight(existing.id) { it.copy(style = st) }; activeHl = existing.copy(style = st) }
                     else vm.updateSettings { it.copy(highlightStyle = st) }
                 },
+                // The bar stays open on the new highlight so a reaction or note can follow.
                 onColor = { color ->
-                    if (existing != null) { vm.updateHighlight(existing.id) { it.copy(color = color) }; activeHl = null }
-                    else sel?.let { ss -> vm.addHighlight(book.id, chapter, ss.start.block, ss.start.off, ss.end.block, ss.end.off, selText!!, color, ch.title, style = s.highlightStyle); sel = null }
+                    if (existing != null) { vm.updateHighlight(existing.id) { it.copy(color = color) }; activeHl = existing.copy(color = color) }
+                    else sel?.let { ss -> activeHl = vm.addHighlight(book.id, chapter, ss.start.block, ss.start.off, ss.end.block, ss.end.off, selText!!, color, ch.title, style = s.highlightStyle); sel = null }
+                },
+                reaction = existing?.reaction,
+                onReact = { emoji ->
+                    existing?.let { h ->
+                        haptics.tap()
+                        vm.reactHighlight(h.id, emoji)
+                        activeHl = h.copy(reaction = if (h.reaction == emoji) null else emoji)
+                    }
                 },
                 onNote = {
                     noteFor = existing ?: sel?.let { ss -> vm.addHighlight(book.id, chapter, ss.start.block, ss.start.off, ss.end.block, ss.end.off, selText!!, 0, ch.title, style = s.highlightStyle) }
@@ -844,6 +857,8 @@ private fun Paragraph(
     style: TextStyle,
     ref: ParaRef,
     highlights: List<Triple<IntRange, Int, Int>>,
+    /** Emoji to show just after the given character offset (the end of a reacted highlight). */
+    reactions: List<Pair<Int, String>>,
     selection: IntRange?,
     searchTerm: String?,
     onTap: (Int) -> Unit,
@@ -856,6 +871,7 @@ private fun Paragraph(
     val long by rememberUpdatedState(onLong)
     val drag by rememberUpdatedState(onDrag)
     val end by rememberUpdatedState(onEnd)
+    val measurer = rememberTextMeasurer()
     val annotated = remember(text, highlights, selection, searchTerm) {
         buildAnnotatedString {
             append(text)
@@ -879,6 +895,20 @@ private fun Paragraph(
                 val l = ref.layout ?: return@drawBehind
                 highlights.forEach { (r, color, hlStyle) ->
                     if (hlStyle == 1 && !r.isEmpty()) underline(l, r, HighlightColors[color % HighlightColors.size], 2.4.dp.toPx(), 3.5.dp.toPx())
+                }
+            }
+            .drawWithContent {
+                drawContent()
+                val l = ref.layout ?: return@drawWithContent
+                // Reaction sits like a small superscript at the end of the highlight.
+                reactions.forEach { (end, emoji) ->
+                    val len = l.layoutInput.text.length
+                    if (len == 0) return@forEach
+                    val ci = end.coerceIn(0, len - 1)
+                    val m = measurer.measure(emoji, TextStyle(fontSize = (style.fontSize.value * 0.8f).sp))
+                    val x = (l.getBoundingBox(ci).right - m.size.width * 0.15f).coerceAtMost(size.width - m.size.width)
+                    val y = l.getLineTop(l.getLineForOffset(ci)) - m.size.height * 0.35f
+                    drawText(m, topLeft = Offset(x, y))
                 }
             }
             .pointerInput(text) {
@@ -945,6 +975,8 @@ private fun SelectionBar(
     style: Int,
     onStyle: (Int) -> Unit,
     onColor: (Int) -> Unit,
+    reaction: String?,
+    onReact: (String) -> Unit,
     onNote: () -> Unit,
     onPost: () -> Unit,
     onCopy: () -> Unit,
@@ -956,6 +988,22 @@ private fun SelectionBar(
         Modifier.navigationBarsPadding().padding(12.dp).fillMaxWidth().panel(RoundedCornerShape(30.dp)).padding(vertical = 12.dp, horizontal = 8.dp),
         horizontalAlignment = Alignment.CenterHorizontally,
     ) {
+        // Reactions appear once the highlight exists.
+        AnimatedVisibility(isExisting) {
+            Row(Modifier.padding(bottom = 10.dp), horizontalArrangement = Arrangement.spacedBy(6.dp)) {
+                ReactionEmojis.forEach { e ->
+                    val on = e == reaction
+                    Text(
+                        e, fontSize = 24.sp,
+                        modifier = Modifier.clip(CircleShape)
+                            .background(if (on) g.accent.copy(alpha = 0.22f) else Color.Transparent)
+                            .border(if (on) 1.5.dp else 0.dp, if (on) g.accent else Color.Transparent, CircleShape)
+                            .clickable { onReact(e) }.padding(horizontal = 8.dp, vertical = 4.dp)
+                            .graphicsLayer { val k = if (on) 1.12f else 1f; scaleX = k; scaleY = k },
+                    )
+                }
+            }
+        }
         Row(horizontalArrangement = Arrangement.spacedBy(12.dp), verticalAlignment = Alignment.CenterVertically) {
             // Marker or underline for this highlight.
             Row(Modifier.height(34.dp).clip(CircleShape).background(g.fill).padding(2.dp)) {
@@ -1099,7 +1147,8 @@ fun ContentsSheet(
                     Column(Modifier.fillMaxWidth().clickable { onHighlight(h) }.padding(horizontal = 24.dp, vertical = 12.dp)) {
                         Row(verticalAlignment = Alignment.CenterVertically) {
                             Box(Modifier.size(10.dp).clip(CircleShape).background(HighlightColors[h.color % HighlightColors.size]))
-                            Text(chapters.getOrNull(h.chapter)?.title.orEmpty(), fontSize = 13.sp, color = g.text2, modifier = Modifier.padding(start = 8.dp), maxLines = 1)
+                            Text(chapters.getOrNull(h.chapter)?.title.orEmpty(), fontSize = 13.sp, color = g.text2, modifier = Modifier.padding(start = 8.dp).weight(1f, fill = false), maxLines = 1)
+                            h.reaction?.let { Text(it, fontSize = 14.sp, modifier = Modifier.padding(start = 6.dp)) }
                         }
                         Text(h.text, fontFamily = QuoteSerif, fontSize = 17.sp, color = g.text, maxLines = 4, overflow = TextOverflow.Ellipsis, modifier = Modifier.padding(top = 4.dp))
                         if (!h.note.isNullOrBlank()) Text("✎ ${h.note}", fontSize = 14.sp, color = g.text2, modifier = Modifier.padding(top = 4.dp))

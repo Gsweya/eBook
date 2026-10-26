@@ -55,6 +55,7 @@ class AppViewModel(app: Application) : AndroidViewModel(app) {
             d.copy(
                 books = d.books.map { if (it.id == bookId) it.copy(readingMs = it.readingMs + ms) else it },
                 readingLog = d.readingLog + (day to (d.readingLog[day] ?: 0L) + ms),
+                bookDays = d.bookDays + (day to (d.bookDays[day].orEmpty().let { m -> m + (bookId to (m[bookId] ?: 0L) + ms) })),
             )
         }
     }
@@ -133,6 +134,9 @@ class AppViewModel(app: Application) : AndroidViewModel(app) {
     fun updateHighlight(id: String, f: (Highlight) -> Highlight) = store.update { d ->
         d.copy(highlights = d.highlights.map { if (it.id == id) f(it) else it })
     }
+
+    /** Sets the highlight's reaction; picking the current one clears it. */
+    fun reactHighlight(id: String, emoji: String) = updateHighlight(id) { it.copy(reaction = if (it.reaction == emoji) null else emoji) }
 
     fun deleteHighlight(id: String) = store.update { d ->
         d.copy(highlights = d.highlights.filterNot { it.id == id }, posts = d.posts.filterNot { it.highlightId == id })

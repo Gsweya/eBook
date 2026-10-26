@@ -132,7 +132,8 @@ fun BookDetailScreen(vm: AppViewModel, id: String, nav: Nav) {
                     ) {
                         Box(Modifier.width(4.dp).height(36.dp).clip(CircleShape).background(HighlightColors[h.color % HighlightColors.size]))
                         Spacer(Modifier.width(12.dp))
-                        Text(h.text, fontFamily = QuoteSerif, fontSize = 16.sp, color = g.text, maxLines = 4, overflow = TextOverflow.Ellipsis)
+                        Text(h.text, fontFamily = QuoteSerif, fontSize = 16.sp, color = g.text, maxLines = 4, overflow = TextOverflow.Ellipsis, modifier = Modifier.weight(1f))
+                        h.reaction?.let { Text(it, fontSize = 18.sp, modifier = Modifier.padding(start = 8.dp)) }
                     }
                 }
                 Spacer(Modifier.height(24.dp))

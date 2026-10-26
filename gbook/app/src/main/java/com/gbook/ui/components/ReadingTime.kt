@@ -2,6 +2,11 @@ package com.gbook.ui.components
 
 import android.os.SystemClock
 import androidx.compose.foundation.background
+import androidx.compose.foundation.clickable
+import androidx.compose.foundation.layout.size
+import androidx.compose.material.icons.Icons
+import androidx.compose.material.icons.automirrored.rounded.KeyboardArrowRight
+import androidx.compose.material3.Icon
 import androidx.compose.foundation.border
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
@@ -91,7 +96,7 @@ fun readingStreak(log: Map<String, Long>): Int {
 
 /** Today's reading time, a 7-day bar chart and week / streak / total figures. */
 @Composable
-fun ReadingStatsCard(log: Map<String, Long>, totalMs: Long, modifier: Modifier = Modifier) {
+fun ReadingStatsCard(log: Map<String, Long>, totalMs: Long, onClick: () -> Unit, modifier: Modifier = Modifier) {
     val g = LocalG.current
     val today = LocalDate.now()
     val days = (6 downTo 0).map { today.minusDays(it.toLong()) }
@@ -100,11 +105,15 @@ fun ReadingStatsCard(log: Map<String, Long>, totalMs: Long, modifier: Modifier =
     Column(
         modifier.fillMaxWidth().clip(RoundedCornerShape(24.dp)).background(g.surface)
             .border(0.75.dp, g.separator.copy(alpha = if (g.dark) 0.55f else 1f), RoundedCornerShape(24.dp))
+            .clickable(onClick = onClick)
             .padding(18.dp),
     ) {
         Row(verticalAlignment = Alignment.Bottom) {
             Column(Modifier.weight(1f)) {
-                Text("READ TODAY", fontSize = 12.sp, fontWeight = FontWeight.SemiBold, letterSpacing = 1.2.sp, color = g.text2)
+                Row(verticalAlignment = Alignment.CenterVertically) {
+                    Text("READ TODAY", fontSize = 12.sp, fontWeight = FontWeight.SemiBold, letterSpacing = 1.2.sp, color = g.text2)
+                    Icon(Icons.AutoMirrored.Rounded.KeyboardArrowRight, "Reading activity", tint = g.text2, modifier = Modifier.size(18.dp))
+                }
                 Text(formatDuration(values.last()), fontFamily = DisplaySerif, fontWeight = FontWeight.Bold, fontSize = 30.sp, color = g.text)
             }
             // Last 7 days; today's bar uses the accent gradient.

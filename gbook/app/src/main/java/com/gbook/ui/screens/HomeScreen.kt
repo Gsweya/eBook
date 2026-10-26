@@ -1,5 +1,7 @@
 package com.gbook.ui.screens
 
+import com.gbook.ui.components.bottomBarClearance
+import com.gbook.ui.components.bottomBarClearance
 import androidx.activity.compose.BackHandler
 import androidx.activity.compose.rememberLauncherForActivityResult
 import androidx.compose.animation.AnimatedVisibility
@@ -230,7 +232,7 @@ private fun LibraryTab(vm: AppViewModel, nav: Nav, onImport: () -> Unit, onScrol
         columns = GridCells.Fixed(3),
         state = grid,
         modifier = Modifier.fillMaxSize(),
-        contentPadding = PaddingValues(start = 20.dp, end = 20.dp, bottom = 120.dp),
+        contentPadding = PaddingValues(start = 20.dp, end = 20.dp, bottom = bottomBarClearance()),
         horizontalArrangement = Arrangement.spacedBy(16.dp),
         verticalArrangement = Arrangement.spacedBy(22.dp),
     ) {
@@ -379,7 +381,7 @@ private fun HighlightsTab(vm: AppViewModel, nav: Nav, onScrollDir: (Boolean) -> 
     }
     val list = rememberLazyListState()
     ScrollDirection(list.firstVisibleItemIndex, list.firstVisibleItemScrollOffset, onScrollDir)
-    LazyColumn(state = list, modifier = Modifier.fillMaxSize(), contentPadding = PaddingValues(bottom = 120.dp)) {
+    LazyColumn(state = list, modifier = Modifier.fillMaxSize(), contentPadding = PaddingValues(bottom = bottomBarClearance())) {
         item {
             Box(Modifier.statusBarsPadding().padding(top = 48.dp)) {
                 LargeTitle("Highlights", "${data.highlights.size} saved across ${groups.size} books")

@@ -1,5 +1,6 @@
 package com.gbook.ui.screens
 
+import com.gbook.ui.components.bottomBarClearance
 import androidx.compose.foundation.ExperimentalFoundationApi
 import androidx.compose.foundation.background
 import androidx.compose.foundation.border
@@ -154,7 +155,7 @@ fun CollectionScreen(vm: AppViewModel, id: String, nav: Nav) {
     Box(Modifier.fillMaxSize().background(g.bg)) {
         LazyVerticalGrid(
             GridCells.Fixed(3), Modifier.fillMaxSize(),
-            contentPadding = PaddingValues(start = 20.dp, end = 20.dp, bottom = 120.dp),
+            contentPadding = PaddingValues(start = 20.dp, end = 20.dp, bottom = bottomBarClearance()),
             horizontalArrangement = Arrangement.spacedBy(16.dp), verticalArrangement = Arrangement.spacedBy(22.dp),
         ) {
             item(span = { GridItemSpan(3) }) {

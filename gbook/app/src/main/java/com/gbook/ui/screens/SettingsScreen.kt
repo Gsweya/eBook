@@ -1,5 +1,11 @@
 package com.gbook.ui.screens
 
+import com.gbook.ui.components.bottomBarClearance
+import androidx.compose.foundation.Image
+import androidx.compose.ui.graphics.ColorFilter
+import androidx.compose.ui.res.painterResource
+import androidx.compose.ui.text.style.TextOverflow
+import com.gbook.ui.theme.DisplaySerif
 import android.text.format.DateUtils
 import android.Manifest
 import android.content.Intent
@@ -165,55 +171,107 @@ fun SettingsTab(vm: AppViewModel, page: String?, onPage: (String?) -> Unit, onSc
 @Composable
 private fun SettingsRoot(vm: AppViewModel, onPage: (String?) -> Unit, onScrollDir: (Boolean) -> Unit) {
     val g = LocalG.current
+    val ctx = LocalContext.current
     val data by vm.data.collectAsState()
     val s = data.settings
     val list = rememberLazyListState()
+    val version = remember(ctx) { runCatching { ctx.packageManager.getPackageInfo(ctx.packageName, 0).versionName }.getOrNull() ?: "" }
     ScrollDirection(list.firstVisibleItemIndex, list.firstVisibleItemScrollOffset, onScrollDir)
-    LazyColumn(state = list, modifier = Modifier.fillMaxSize(), contentPadding = PaddingValues(bottom = 140.dp)) {
+    fun page(id: String) = Pages.first { it.id == id }
+    @Composable
+    fun Row(id: String, trailing: String? = null) = page(id).let { p -> SettingsNavRow(p.icon, p.title, p.subtitle, trailing) { onPage(id) } }
+    LazyColumn(state = list, modifier = Modifier.fillMaxSize(), contentPadding = PaddingValues(bottom = bottomBarClearance())) {
         item {
-            Column(Modifier.statusBarsPadding().padding(start = 20.dp, end = 20.dp, top = 48.dp, bottom = 8.dp)) {
-                Text("Settings", style = GType.largeTitle, color = g.text)
-            }
+            Text(
+                "Settings", style = GType.largeTitle, color = g.text,
+                modifier = Modifier.statusBarsPadding().padding(start = 20.dp, end = 20.dp, top = 48.dp, bottom = 4.dp),
+            )
         }
         item {
+            SectionLabel("Profile")
             SettingsCard {
-                Row(
-                    Modifier.fillMaxWidth().clickable { onPage("profile") }.padding(16.dp),
-                    verticalAlignment = Alignment.CenterVertically,
-                ) {
-                    Avatar(vm.avatarFile, s.avatarVersion, s.profileName, 60.dp)
-                    Spacer(Modifier.width(16.dp))
-                    Column(Modifier.weight(1f)) {
-                        Text(s.profileName.ifBlank { "Your profile" }, fontSize = 20.sp, fontWeight = FontWeight.SemiBold, color = g.text)
-                        Text("Name and profile picture", fontSize = 14.sp, color = g.text2)
-                    }
-                    Icon(Icons.AutoMirrored.Rounded.KeyboardArrowRight, null, tint = g.text2)
-                }
+                SettingsNavRow(
+                    leading = { Avatar(vm.avatarFile, s.avatarVersion, s.profileName, 44.dp) },
+                    title = s.profileName.ifBlank { "Your profile" }, subtitle = "Name and profile picture",
+                ) { onPage("profile") }
             }
         }
         item {
-            Spacer(Modifier.height(10.dp))
+            SectionLabel("Reading")
             SettingsCard {
-                Pages.forEachIndexed { i, p ->
-                    if (i > 0) HorizontalDivider(Modifier.padding(start = 66.dp), color = g.separator)
-                    Row(
-                        Modifier.fillMaxWidth().clickable { onPage(p.id) }.padding(horizontal = 16.dp, vertical = 13.dp),
-                        verticalAlignment = Alignment.CenterVertically,
-                    ) {
-                        Box(
-                            Modifier.size(36.dp).clip(RoundedCornerShape(11.dp)).background(g.accent.copy(alpha = 0.15f)),
-                            contentAlignment = Alignment.Center,
-                        ) { Icon(p.icon, null, tint = g.accent, modifier = Modifier.size(20.dp)) }
-                        Spacer(Modifier.width(14.dp))
-                        Column(Modifier.weight(1f)) {
-                            Text(p.title, fontSize = 17.sp, color = g.text)
-                            Text(p.subtitle, fontSize = 13.sp, color = g.text2)
-                        }
-                        Icon(Icons.AutoMirrored.Rounded.KeyboardArrowRight, null, tint = g.text2)
-                    }
-                }
+                Row("reading", if (s.pageMode == 1) "Pages" else "Scroll")
+                RowDivider()
+                Row("goals", if (s.dailyGoalMin > 0) "${s.dailyGoalMin} min" else null)
             }
         }
+        item {
+            SectionLabel("Personalise")
+            SettingsCard {
+                Row("appearance", listOf("System", "Light", "Dark").getOrElse(s.appearance) { "System" })
+                RowDivider()
+                Row("navigation", if (s.navStyle == 1) "Classic" else "Pill")
+            }
+        }
+        item {
+            SectionLabel("Library")
+            SettingsCard { Row("backup") }
+        }
+        item {
+            SectionLabel("About")
+            SettingsCard { Row("about", version) }
+        }
+        item { SettingsFooter(version) }
+    }
+}
+
+/** Tappable settings row: a tinted icon tile (or custom [leading]), title and description, and an optional value. */
+@Composable
+private fun SettingsNavRow(icon: ImageVector, title: String, subtitle: String?, trailing: String? = null, onClick: () -> Unit) {
+    val g = LocalG.current
+    SettingsNavRow(
+        leading = {
+            Box(
+                Modifier.size(36.dp).clip(RoundedCornerShape(12.dp)).background(g.accent.copy(alpha = 0.13f)),
+                contentAlignment = Alignment.Center,
+            ) { Icon(icon, null, tint = g.accent, modifier = Modifier.size(21.dp)) }
+        },
+        title = title, subtitle = subtitle, trailing = trailing, onClick = onClick,
+    )
+}
+
+@Composable
+private fun SettingsNavRow(leading: @Composable () -> Unit, title: String, subtitle: String?, trailing: String? = null, onClick: () -> Unit) {
+    val g = LocalG.current
+    Row(
+        Modifier.fillMaxWidth().clickable(onClick = onClick).padding(horizontal = 16.dp, vertical = 14.dp),
+        verticalAlignment = Alignment.CenterVertically,
+    ) {
+        leading()
+        Spacer(Modifier.width(14.dp))
+        Column(Modifier.weight(1f).padding(end = 12.dp)) {
+            Text(title, fontSize = 17.sp, fontWeight = FontWeight.Medium, color = g.text, maxLines = 1, overflow = TextOverflow.Ellipsis)
+            if (!subtitle.isNullOrBlank()) Text(subtitle, fontSize = 14.sp, color = g.text2, modifier = Modifier.padding(top = 2.dp))
+        }
+        if (trailing != null) Text(trailing, fontSize = 15.sp, color = g.text2, maxLines = 1)
+    }
+}
+
+/** Hairline between rows, starting under the text so the icon tiles stay unbroken. */
+@Composable
+private fun RowDivider() = HorizontalDivider(Modifier.padding(start = 66.dp), thickness = 0.75.dp, color = LocalG.current.separator)
+
+@Composable
+private fun SettingsFooter(version: String) {
+    val g = LocalG.current
+    Column(Modifier.fillMaxWidth().padding(top = 28.dp, bottom = 8.dp), horizontalAlignment = Alignment.CenterHorizontally) {
+        Row(verticalAlignment = Alignment.CenterVertically) {
+            Box(Modifier.size(28.dp).clip(RoundedCornerShape(8.dp)).background(g.accentBrush), contentAlignment = Alignment.Center) {
+                Image(painterResource(com.gbook.R.drawable.ic_book_glyph), null, colorFilter = ColorFilter.tint(g.onAccent), modifier = Modifier.size(17.dp))
+            }
+            Text("GBook", fontFamily = DisplaySerif, fontWeight = FontWeight.Bold, fontSize = 20.sp, color = g.text, modifier = Modifier.padding(start = 8.dp))
+        }
+        Text("Made with ❤️ · props to Ame", style = GType.caption, color = g.text2, modifier = Modifier.padding(top = 8.dp))
+        if (version.isNotEmpty()) Text("Version $version", style = GType.caption, color = g.text2)
     }
 }
 
@@ -222,11 +280,16 @@ private fun SettingsSubPage(title: String, onBack: () -> Unit, onScrollDir: (Boo
     val g = LocalG.current
     val scroll = rememberScrollState()
     ScrollDirection(0, scroll.value, onScrollDir)
-    Column(Modifier.fillMaxSize().verticalScroll(scroll).padding(bottom = 140.dp)) {
-        Row(Modifier.statusBarsPadding().padding(start = 12.dp, end = 20.dp, top = 6.dp), verticalAlignment = Alignment.CenterVertically) {
-            IconCircle(Icons.AutoMirrored.Rounded.ArrowBack, "Back", onBack, size = 44.dp)
+    Column(Modifier.fillMaxSize().verticalScroll(scroll).padding(bottom = bottomBarClearance())) {
+        // Back arrow sits inline with the large title.
+        Row(Modifier.statusBarsPadding().padding(start = 6.dp, end = 20.dp, top = 40.dp, bottom = 4.dp), verticalAlignment = Alignment.CenterVertically) {
+            Box(
+                Modifier.size(44.dp).clip(CircleShape).clickable(onClick = onBack),
+                contentAlignment = Alignment.Center,
+            ) { Icon(Icons.AutoMirrored.Rounded.ArrowBack, "Back", tint = g.text, modifier = Modifier.size(26.dp)) }
+            Spacer(Modifier.width(6.dp))
+            Text(title, style = GType.largeTitle, color = g.text, maxLines = 1, overflow = TextOverflow.Ellipsis)
         }
-        Text(title, style = GType.largeTitle, color = g.text, modifier = Modifier.padding(start = 20.dp, top = 10.dp, bottom = 10.dp))
         content()
     }
 }
@@ -292,7 +355,7 @@ private fun NavigationPage(vm: AppViewModel) {
                 Box(Modifier.fillMaxWidth(0.25f).fillMaxHeight().padding(3.dp).clip(CircleShape).background(g.accent.copy(alpha = 0.35f)))
             }
         }
-        NavStyleCard("Classic", "Capsule + settings button", s.navStyle == 1, Modifier.weight(1f), { vm.updateSettings { it.copy(navStyle = 1) } }) {
+        NavStyleCard("Classic", "Capsule + search button", s.navStyle == 1, Modifier.weight(1f), { vm.updateSettings { it.copy(navStyle = 1) } }) {
             Row(verticalAlignment = Alignment.CenterVertically) {
                 Box(Modifier.weight(1f).height(26.dp).clip(CircleShape).background(g.fill))
                 Spacer(Modifier.width(8.dp))
@@ -605,7 +668,7 @@ private fun HighlightPreview(style: Int) {
 private fun SectionLabel(text: String) {
     Text(
         text.uppercase(), style = GType.eyebrow, color = LocalG.current.text2,
-        modifier = Modifier.padding(start = 36.dp, top = 22.dp, bottom = 8.dp),
+        modifier = Modifier.padding(start = 22.dp, top = 20.dp, bottom = 8.dp),
     )
 }
 
@@ -613,8 +676,8 @@ private fun SectionLabel(text: String) {
 private fun SettingsCard(content: @Composable ColumnScope.() -> Unit) {
     val g = LocalG.current
     Column(
-        Modifier.padding(horizontal = 16.dp, vertical = 6.dp).fillMaxWidth().clip(RoundedCornerShape(24.dp)).background(g.surface)
-            .border(0.75.dp, g.separator.copy(alpha = if (g.dark) 0.55f else 1f), RoundedCornerShape(24.dp)),
+        Modifier.padding(horizontal = 16.dp, vertical = 4.dp).fillMaxWidth().clip(RoundedCornerShape(14.dp)).background(g.surface)
+            .border(0.75.dp, g.separator.copy(alpha = if (g.dark) 0.55f else 1f), RoundedCornerShape(14.dp)),
         content = content,
     )
 }

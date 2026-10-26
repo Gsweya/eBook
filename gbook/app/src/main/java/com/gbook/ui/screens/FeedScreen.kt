@@ -1,5 +1,6 @@
 package com.gbook.ui.screens
 
+import com.gbook.ui.components.bottomBarClearance
 import androidx.compose.animation.AnimatedVisibility
 import androidx.compose.animation.core.Spring
 import androidx.compose.animation.core.animateFloatAsState
@@ -117,7 +118,7 @@ fun FeedTab(vm: AppViewModel, nav: Nav, onGenerate: () -> Unit, onScrollDir: (Bo
         onScrollDir(list.firstVisibleItemIndex > last); last = list.firstVisibleItemIndex
     }
 
-    LazyColumn(state = list, modifier = Modifier.fillMaxSize(), contentPadding = PaddingValues(bottom = 120.dp)) {
+    LazyColumn(state = list, modifier = Modifier.fillMaxSize(), contentPadding = PaddingValues(bottom = bottomBarClearance())) {
         item {
             Column(Modifier.statusBarsPadding().padding(start = 20.dp, top = 48.dp, end = 20.dp)) {
                 Text("Feed", style = GType.largeTitle, color = g.text)

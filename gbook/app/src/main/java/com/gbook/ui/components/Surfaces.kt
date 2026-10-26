@@ -45,6 +45,8 @@ import androidx.compose.ui.graphics.graphicsLayer
 import androidx.compose.ui.draw.drawWithCache
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.Dp
+import androidx.compose.foundation.layout.asPaddingValues
+import androidx.compose.foundation.layout.navigationBars
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import com.gbook.ui.theme.LocalG
@@ -203,3 +205,11 @@ fun GSlider(value: Float, range: ClosedFloatingPointRange<Float>, onChange: (Flo
         )
     }
 }
+
+/**
+ * Bottom padding for a tab's scrolling content, so its last item clears the floating bottom bar and the
+ * system navigation bar (gesture pill or three buttons) instead of hiding underneath them.
+ */
+@Composable
+fun bottomBarClearance(extra: Dp = 0.dp): Dp =
+    androidx.compose.foundation.layout.WindowInsets.navigationBars.asPaddingValues().calculateBottomPadding() + 108.dp + extra

@@ -1,5 +1,6 @@
 package com.gbook.ui.screens
 
+import com.gbook.ui.components.bottomBarClearance
 import androidx.compose.foundation.ExperimentalFoundationApi
 import androidx.compose.foundation.background
 import androidx.compose.foundation.clickable
@@ -97,7 +98,7 @@ fun SearchTab(vm: AppViewModel, nav: Nav, onScrollDir: (Boolean) -> Unit) {
     }
     val open = { b: Book -> focusManager.clearFocus(); vm.markOpened(b.id); nav.open(b) }
 
-    LazyColumn(state = list, modifier = Modifier.fillMaxSize(), contentPadding = PaddingValues(bottom = 120.dp)) {
+    LazyColumn(state = list, modifier = Modifier.fillMaxSize(), contentPadding = PaddingValues(bottom = bottomBarClearance())) {
         item {
             Column(Modifier.statusBarsPadding().padding(top = 48.dp, start = 20.dp, end = 20.dp)) {
                 Text("Search", style = GType.largeTitle, color = g.text, modifier = Modifier.padding(bottom = 12.dp))

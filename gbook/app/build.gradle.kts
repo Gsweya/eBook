@@ -15,8 +15,8 @@ android {
         applicationId = "com.gbook"
         minSdk = 26
         targetSdk = 36
-        versionCode = 3
-        versionName = "1.1.0"
+        versionCode = 4
+        versionName = "1.2.0"
     }
     // Release signing reads a local, git-ignored keystore.properties (storeFile, storePassword, keyAlias, keyPassword).
     val keystoreProps = rootProject.file("keystore.properties").takeIf { it.exists() }?.let { f ->
@@ -42,7 +42,8 @@ android {
     }
     buildFeatures { compose = true }
     // Local sample books (git-ignored) are bundled into debug builds only, never into release APKs.
-    sourceSets["debug"].assets.srcDir("../../sample_books")
+    // Pass -PnoSamples for a debug build without them (e.g. for public screenshots).
+    if (!project.hasProperty("noSamples")) sourceSets["debug"].assets.srcDir("../../sample_books")
     packaging { resources { excludes += "/META-INF/{AL2.0,LGPL2.1}" } }
 }
 

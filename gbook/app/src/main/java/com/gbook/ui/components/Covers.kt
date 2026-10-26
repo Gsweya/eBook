@@ -44,6 +44,8 @@ private val bitmapCache = object : LruCache<String, ImageBitmap>(48 * 1024 * 102
 @Composable
 fun rememberFileBitmap(path: String?, maxWidth: Int = 700): ImageBitmap? {
     val v by produceState(path?.let { bitmapCache.get("$it@$maxWidth") }, path, maxWidth) {
+        // The state outlives a change of path, so reset it: otherwise a reused slot keeps showing the previous cover.
+        value = path?.let { bitmapCache.get("$it@$maxWidth") }
         if (path == null || value != null) return@produceState
         value = withContext(Dispatchers.IO) {
             val f = File(path)

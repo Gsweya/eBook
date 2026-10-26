@@ -4,6 +4,35 @@ An open-source Android eReader for EPUB and PDF, built with Kotlin and Jetpack C
 
 **[Download the latest APK](https://github.com/Gsweya/eBook/releases/latest)** — open it on your phone and allow installing from your browser or file manager.
 
+## Screenshots
+
+<table>
+  <tr>
+    <td align="center"><img src="docs/screenshots/10-library.png" width="200" alt="Library and reading stats"><br><sub>Library and reading stats</sub></td>
+    <td align="center"><img src="docs/screenshots/50-reader.png" width="200" alt="Reader with highlights"><br><sub>Reader with highlights</sub></td>
+    <td align="center"><img src="docs/screenshots/60-pages.png" width="200" alt="Page-turn mode"><br><sub>Page-turn mode</sub></td>
+    <td align="center"><img src="docs/screenshots/61-tracker.png" width="200" alt="Reading tracker"><br><sub>Reading tracker</sub></td>
+  </tr>
+  <tr>
+    <td align="center"><img src="docs/screenshots/20-feed.png" width="200" alt="Feed of posts"><br><sub>Feed of posts</sub></td>
+    <td align="center"><img src="docs/screenshots/22-highlights.png" width="200" alt="Highlights"><br><sub>Highlights</sub></td>
+    <td align="center"><img src="docs/screenshots/59-highlight-actions.png" width="200" alt="Colours and reactions"><br><sub>Colours and reactions</sub></td>
+    <td align="center"><img src="docs/screenshots/54-reader-fonts.png" width="200" alt="Ten reading fonts"><br><sub>Ten reading fonts</sub></td>
+  </tr>
+  <tr>
+    <td align="center"><img src="docs/screenshots/14-collection.png" width="200" alt="Collections"><br><sub>Collections</sub></td>
+    <td align="center"><img src="docs/screenshots/30-search.png" width="200" alt="Search"><br><sub>Search</sub></td>
+    <td align="center"><img src="docs/screenshots/15-book-detail.png" width="200" alt="Book page"><br><sub>Book page</sub></td>
+    <td align="center"><img src="docs/screenshots/40-settings.png" width="200" alt="Settings"><br><sub>Settings</sub></td>
+  </tr>
+  <tr>
+    <td align="center"><img src="docs/screenshots/01-splash.png" width="200" alt="Welcome"><br><sub>Welcome</sub></td>
+    <td align="center"><img src="docs/screenshots/03-crop.png" width="200" alt="Profile photo cropper"><br><sub>Profile photo cropper</sub></td>
+    <td align="center"><img src="docs/screenshots/70-dark-library.png" width="200" alt="Dark mode"><br><sub>Dark mode</sub></td>
+    <td align="center"><img src="docs/screenshots/74-dark-reader.png" width="200" alt="Dark reader"><br><sub>Dark reader</sub></td>
+  </tr>
+</table>
+
 ## Features
 
 - **Library** of EPUB and PDF books with covers, progress and reactions; add several books at once with the **+** button.

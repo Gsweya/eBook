@@ -113,8 +113,7 @@ fun ReadingStatsCard(log: Map<String, Long>, totalMs: Long, goalMin: Int, onClic
     val values = days.map { log[it.toString()] ?: 0L }
     val max = (values.maxOrNull() ?: 0L).coerceAtLeast(15 * 60_000L)
     Column(
-        modifier.fillMaxWidth().clip(RoundedCornerShape(24.dp)).background(g.surface)
-            .border(0.75.dp, g.separator.copy(alpha = if (g.dark) 0.55f else 1f), RoundedCornerShape(24.dp))
+        modifier.fillMaxWidth().glass(RoundedCornerShape(24.dp))
             .clickable(onClick = onClick)
             .padding(18.dp),
     ) {

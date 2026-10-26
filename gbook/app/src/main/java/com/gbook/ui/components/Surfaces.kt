@@ -67,13 +67,47 @@ fun Modifier.panel(shape: Shape, tint: Color? = null, elevation: Dp = 6.dp): Mod
         .border(0.75.dp, edge, shape)
 }
 
+/**
+ * Frosted glass card: a translucent fill with a sheen fading down from the top and a bright rim. It lets the
+ * accent glow of [GlassBackdrop] show through, so cards scrolling over it pick up its colour.
+ */
+@Composable
+fun Modifier.glass(shape: Shape): Modifier {
+    val g = LocalG.current
+    val fill = if (g.dark) Color.White.copy(alpha = 0.055f) else Color.White.copy(alpha = 0.6f)
+    val sheen = Brush.verticalGradient(listOf(Color.White.copy(alpha = if (g.dark) 0.07f else 0.45f), Color.Transparent))
+    val rim = if (g.dark) Brush.verticalGradient(listOf(Color.White.copy(alpha = 0.22f), Color.White.copy(alpha = 0.05f)))
+    else Brush.verticalGradient(listOf(Color.White, Color.Black.copy(alpha = 0.07f)))
+    return this.clip(shape).background(fill).background(sheen).border(1.dp, rim, shape)
+}
+
+/**
+ * A faint wash of the accent behind a screen, so [glass] cards have something to frost: one broad glow near the
+ * top and a fainter one lower down, both mixed towards the background so no theme comes out loud.
+ */
+@Composable
+fun GlassBackdrop(modifier: Modifier = Modifier) {
+    val g = LocalG.current
+    val tint = androidx.compose.ui.graphics.lerp(g.bg, g.accent, if (g.dark) 0.35f else 0.45f)
+    val a = if (g.dark) 0.16f else 0.18f
+    androidx.compose.foundation.Canvas(modifier) {
+        // (x, y, radius, strength) as fractions of the width/height.
+        listOf(floatArrayOf(0.85f, 0.12f, 0.9f, 1f), floatArrayOf(0.1f, 0.7f, 0.8f, 0.6f)).forEach { (x, y, r, k) ->
+            val c = androidx.compose.ui.geometry.Offset(size.width * x, size.height * y)
+            val rad = size.width * r
+            drawCircle(Brush.radialGradient(listOf(tint.copy(alpha = a * k), Color.Transparent), c, rad), rad, c)
+        }
+    }
+}
+
 /** Paints the content (e.g. an icon) with [brush], keeping only its alpha. Used for accent-gradient icons. */
 fun Modifier.gradientMask(brush: Brush): Modifier =
     graphicsLayer { compositingStrategy = CompositingStrategy.Offscreen }
         .drawWithCache { onDrawWithContent { drawContent(); drawRect(brush, blendMode = BlendMode.SrcIn) } }
 
+/** Shrinks slightly while pressed and taps a haptic on click; no ripple. */
 @Composable
-private fun Modifier.pressable(onClick: () -> Unit, enabled: Boolean = true): Modifier {
+fun Modifier.pressable(onClick: () -> Unit, enabled: Boolean = true): Modifier {
     val src = remember { MutableInteractionSource() }
     val pressed by src.collectIsPressedAsState()
     val s by animateFloatAsState(if (pressed) 0.94f else 1f, label = "press")

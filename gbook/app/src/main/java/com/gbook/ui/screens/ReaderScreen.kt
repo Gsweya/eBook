@@ -41,6 +41,8 @@ import androidx.compose.ui.graphics.rememberGraphicsLayer
 import androidx.compose.ui.graphics.drawscope.translate
 import androidx.compose.ui.graphics.drawscope.scale
 import androidx.compose.ui.unit.IntOffset
+import androidx.compose.material.icons.rounded.Tune
+import androidx.compose.material.icons.rounded.Close
 import androidx.compose.foundation.layout.offset
 import androidx.compose.foundation.layout.BoxWithConstraints
 import kotlin.math.roundToInt
@@ -191,6 +193,7 @@ import com.gbook.ui.components.PrimaryButton
 import com.gbook.ui.components.panel
 import com.gbook.ui.components.rememberFileBitmap
 import com.gbook.ui.components.shareText
+import com.gbook.ui.theme.GType
 import com.gbook.ui.theme.HighlightColors
 import com.gbook.ui.theme.DisplaySerif
 import com.gbook.ui.theme.LocalG
@@ -316,7 +319,6 @@ private fun ReaderContent(
     var activeHl by remember { mutableStateOf<Highlight?>(null) }
     var noteFor by remember { mutableStateOf<Highlight?>(null) }
     var showSettings by remember { mutableStateOf(false) }
-    var showMenu by remember { mutableStateOf(false) }
     var contentsTab by remember { mutableStateOf<Int?>(null) }
     var showSearch by remember { mutableStateOf(false) }
     var showGenerate by remember { mutableStateOf(false) }
@@ -558,6 +560,16 @@ private fun ReaderContent(
         track = next
         return true
     }
+    // Wheel highlighter: with a colour set in the tracker options, each turn of the wheel highlights everything the marker passes.
+    val paintColor = s.trackerColor.takeIf { it >= 0 }
+    var paintFrom by remember(chapter) { mutableStateOf<Track?>(null) }
+    val painting: Sel? = paintFrom?.let { a ->
+        val b = track ?: return@let null
+        val (lo, hi) = if (b.block < a.block || (b.block == a.block && b.unit < a.unit)) b to a else a to b
+        val l = units(lo.block).getOrNull(lo.unit) ?: return@let null
+        val h = units(hi.block).getOrNull(hi.unit) ?: return@let null
+        Sel(TextPos(lo.block, l.first), TextPos(hi.block, h.last + 1))
+    }
     // Keep the tracked text in view: turn the page, or scroll it back to the upper third of the screen.
     LaunchedEffect(track) {
         val t = track ?: return@LaunchedEffect
@@ -624,6 +636,9 @@ private fun ReaderContent(
     }
 
     fun textOf(b: Int) = ch.blocks[b].text
+    fun textIn(ss: Sel) = (ss.start.block..ss.end.block)
+        .mapNotNull { b -> ch.blocks[b].takeIf { it.type == 0 }?.let { blk -> ss.rangeIn(b, blk.text.length)?.let { blk.text.substring(it) } } }
+        .joinToString("\n\n")
 
     fun extendFromAnchor(p: Offset) {
         val (pos, lp) = probe(p) ?: return
@@ -726,7 +741,8 @@ private fun ReaderContent(
                             val hls = chHighlights[i].orEmpty()
                             Paragraph(
                                 text = b.text, style = body, ref = ref,
-                                highlights = hls.map { Triple(it.rangeIn(i, b.text.length), it.color, it.style) },
+                                highlights = hls.map { Triple(it.rangeIn(i, b.text.length), it.color, it.style) } +
+                                    listOfNotNull(paintColor?.let { c -> painting?.rangeIn(i, b.text.length)?.let { Triple(it, c, s.highlightStyle) } }),
                                 reactions = hls.mapNotNull { h -> h.reaction?.takeIf { h.lastBlock == i }?.let { h.rangeIn(i, b.text.length).last to it } },
                                 selection = sel?.rangeIn(i, b.text.length),
                                 searchTerm = searchTerm,
@@ -781,7 +797,20 @@ private fun ReaderContent(
             stepPx = with(density) { (if (s.trackerUnit == 1) 40.dp else 16.dp).toPx() },
             ink = ink, page = page, accent = g.accent,
             onStep = { fwd -> if (stepTrack(fwd)) haptics.tick() },
-            modifier = Modifier.align(Alignment.CenterEnd).padding(end = 4.dp),
+            paintColor = paintColor,
+            onPress = {
+                if (paintColor != null) paintFrom = track?.takeIf { onPage(it) } ?: firstUnitOnPage()?.also { track = it }
+            },
+            onRelease = {
+                val ss = painting; val c = paintColor
+                paintFrom = null
+                if (ss != null && c != null) {
+                    vm.addHighlight(book.id, chapter, ss.start.block, ss.start.off, ss.end.block, ss.end.off, textIn(ss), c, ch.title, style = s.highlightStyle)
+                    haptics.tap()
+                }
+            },
+            modifier = if (s.trackerPosition == 1) Modifier.align(Alignment.BottomEnd).padding(end = 4.dp, bottom = bottom + if (paged) 76.dp else 100.dp)
+            else Modifier.align(Alignment.CenterEnd).padding(end = 4.dp),
         )
         if (sel != null) for (isStart in listOf(true, false)) {
             SelectionHandle(
@@ -835,8 +864,6 @@ private fun ReaderContent(
                 }
                 Spacer(Modifier.width(8.dp))
                 modeToggle?.invoke()
-                if (modeToggle != null) Spacer(Modifier.width(8.dp))
-                IconCircle(Icons.Rounded.TextFields, "Themes & Settings", { showSettings = true }, size = 44.dp)
             }
         }
         AnimatedVisibility(
@@ -861,7 +888,7 @@ private fun ReaderContent(
                         CapsuleSegment({ changeFont(1f) }, enabled = s.fontSize < MAX_FONT) { Text("A", fontSize = 26.sp, color = g.text, fontWeight = FontWeight.Medium) }
                     }
                     Spacer(Modifier.width(10.dp))
-                    IconCircle(Icons.Rounded.FormatListBulleted, "Menu", { showMenu = true }, size = 52.dp)
+                    IconCircle(Icons.Rounded.Tune, "Reading options", { showSettings = true }, size = 52.dp)
                     Spacer(Modifier.weight(1f))
                     IconCircle(Icons.Rounded.ChevronRight, "Next chapter", { goTo(chapter + 1) }, size = 52.dp, enabled = chapter < chapters.lastIndex)
                 }
@@ -869,11 +896,7 @@ private fun ReaderContent(
         }
 
         // Selection / highlight actions
-        val selText = sel?.let { ss ->
-            (ss.start.block..ss.end.block)
-                .mapNotNull { b -> ch.blocks[b].takeIf { it.type == 0 }?.let { blk -> ss.rangeIn(b, blk.text.length)?.let { blk.text.substring(it) } } }
-                .joinToString("\n\n")
-        }
+        val selText = sel?.let { textIn(it) }
         AnimatedVisibility(
             (sel != null && !selecting) || activeHl != null, Modifier.align(Alignment.BottomCenter),
             enter = fadeIn() + slideInVertically { it }, exit = fadeOut() + slideOutVertically { it },
@@ -929,19 +952,25 @@ private fun ReaderContent(
                 modifier = Modifier.align(Alignment.Center).panel(RoundedCornerShape(24.dp)).padding(horizontal = 28.dp, vertical = 16.dp),
             )
         }
-        if (showMenu) ReaderMenu(
-            progress = bookProgress, highlightCount = bookHighlights.size,
-            onDismiss = { showMenu = false },
-            onContents = { showMenu = false; contentsTab = 0 },
-            onHighlights = { showMenu = false; contentsTab = 1 },
-            onSearch = { showMenu = false; showSearch = true },
-            onSettings = { showMenu = false; showSettings = true },
-            onShare = { showMenu = false; shareText(ctx, "I'm reading “${book.title}” by ${book.author} on GBook") },
-            onPosts = { showMenu = false; showGenerate = true },
-        )
     }
 
-    if (showSettings) ReaderSettingsSheet(vm, s, dark, onDismiss = { showSettings = false })
+    if (showSettings) ReaderOptionsSheet(
+        vm, s, dark,
+        // A paragraph from what's on screen, so changes can be judged on the book itself.
+        preview = remember {
+            // On a title page or other short chapter, borrow the first real paragraph further on.
+            (listState.firstVisibleItemIndex until ch.blocks.size).firstNotNullOfOrNull { i -> ch.blocks[i].takeIf { it.type == 0 && it.text.length > 60 }?.text }
+                ?: chapters.drop(chapter + 1).firstNotNullOfOrNull { c -> c.blocks.firstOrNull { it.type == 0 && it.text.length > 60 }?.text }
+                ?: ch.blocks.firstOrNull { it.type == 0 }?.text ?: book.title
+        },
+        progress = bookProgress, highlightCount = bookHighlights.size,
+        onDismiss = { showSettings = false },
+        onContents = { showSettings = false; contentsTab = 0 },
+        onHighlights = { showSettings = false; contentsTab = 1 },
+        onSearch = { showSettings = false; showSearch = true },
+        onShare = { showSettings = false; shareText(ctx, "I'm reading “${book.title}” by ${book.author} on GBook") },
+        onPosts = { showSettings = false; showGenerate = true },
+    )
     contentsTab?.let { tab ->
         ContentsSheet(
             vm, book, chapters, chapter, bookHighlights, tab,
@@ -1209,14 +1238,25 @@ private const val TrackerClearance = 46
  * The reading tracker's wheel: a fixed dial on the right edge, drawn as a cylinder seen edge-on. Turning it
  * down (dragging the ridges) steps the marker forward one word or sentence every [stepPx], turning it up steps
  * back, and a tap steps forward once. Lift and turn again to keep going, like a scroll wheel.
+ *
+ * With a highlight colour set in the tracker options ([paintColor]), every turn also highlights the words the
+ * marker passes, saved when the finger lifts (a tap highlights just the current word).
  */
 @Composable
-private fun TrackerWheel(stepPx: Float, ink: Color, page: Color, accent: Color, onStep: (Boolean) -> Unit, modifier: Modifier) {
+private fun TrackerWheel(
+    stepPx: Float, ink: Color, page: Color, accent: Color, onStep: (Boolean) -> Unit,
+    paintColor: Int?, onPress: () -> Unit, onRelease: () -> Unit,
+    modifier: Modifier,
+) {
     // Total distance turned, in px of wheel surface; drives where the ridges are drawn.
     var turned by remember { mutableFloatStateOf(0f) }
     var held by remember { mutableStateOf(false) }
     val step by rememberUpdatedState(onStep)
+    val press by rememberUpdatedState(onPress)
+    val release by rememberUpdatedState(onRelease)
+    val armed by rememberUpdatedState(paintColor != null)
     val shape = RoundedCornerShape(50)
+    val notch = paintColor?.let { HighlightColors[it % HighlightColors.size] } ?: accent
     Box(
         modifier
             .size(width = 52.dp, height = 240.dp)
@@ -1225,6 +1265,7 @@ private fun TrackerWheel(stepPx: Float, ink: Color, page: Color, accent: Color, 
                     val down = awaitFirstDown()
                     down.consume()
                     held = true
+                    press()
                     var acc = 0f
                     var moved = false
                     try {
@@ -1238,8 +1279,8 @@ private fun TrackerWheel(stepPx: Float, ink: Color, page: Color, accent: Color, 
                             while (acc <= -stepPx) { acc += stepPx; step(false); moved = true }
                             c.consume()
                         }
-                        if (!moved) { step(true); turned += stepPx }
-                    } finally { held = false }
+                        if (!moved && !armed) { step(true); turned += stepPx }
+                    } finally { held = false; release() }
                 }
             },
         contentAlignment = Alignment.CenterEnd,
@@ -1273,9 +1314,9 @@ private fun TrackerWheel(stepPx: Float, ink: Color, page: Color, accent: Color, 
                         }
                         a += gap
                     }
-                    // Centre notch: where the marker "reads" from.
-                    drawLine(accent.copy(alpha = if (held) 1f else 0.75f), Offset(3.dp.toPx(), cy), Offset(7.dp.toPx(), cy), 3.dp.toPx(), StrokeCap.Round)
-                    drawLine(accent.copy(alpha = if (held) 1f else 0.75f), Offset(size.width - 7.dp.toPx(), cy), Offset(size.width - 3.dp.toPx(), cy), 3.dp.toPx(), StrokeCap.Round)
+                    // Centre notch: where the marker "reads" from, in the highlight colour when the wheel paints.
+                    drawLine(notch.copy(alpha = if (held) 1f else 0.8f), Offset(3.dp.toPx(), cy), Offset(7.dp.toPx(), cy), 3.dp.toPx(), StrokeCap.Round)
+                    drawLine(notch.copy(alpha = if (held) 1f else 0.8f), Offset(size.width - 7.dp.toPx(), cy), Offset(size.width - 3.dp.toPx(), cy), 3.dp.toPx(), StrokeCap.Round)
                 }
                 .border(1.dp, ink.copy(alpha = if (held) 0.22f else 0.12f), shape),
         )
@@ -1389,55 +1430,6 @@ private fun BarAction(icon: androidx.compose.ui.graphics.vector.ImageVector, lab
     ) {
         Icon(icon, label, tint = g.text, modifier = Modifier.size(24.dp))
         Text(label, fontSize = 13.sp, color = g.text)
-    }
-}
-
-/** Floating capsule menu anchored bottom-right (spec 3.8: Contents · %, Highlights, Search, Themes). */
-@Composable
-private fun ReaderMenu(
-    progress: Float,
-    highlightCount: Int,
-    onDismiss: () -> Unit,
-    onContents: () -> Unit,
-    onHighlights: () -> Unit,
-    onSearch: () -> Unit,
-    onSettings: () -> Unit,
-    onShare: () -> Unit,
-    onPosts: () -> Unit,
-) {
-    val g = LocalG.current
-    Box(
-        Modifier.fillMaxSize().background(Color.Black.copy(alpha = 0.08f)).pointerInput(Unit) { detectTapGestures { onDismiss() } },
-        contentAlignment = Alignment.BottomEnd,
-    ) {
-        Column(
-            Modifier.navigationBarsPadding().padding(16.dp).width(290.dp),
-            verticalArrangement = Arrangement.spacedBy(10.dp),
-        ) {
-            MenuRow("Contents · ${(progress * 100).toInt()}%", Icons.Rounded.FormatListBulleted, onContents, primary = true)
-            MenuRow(if (highlightCount > 0) "Bookmarks & Highlights · $highlightCount" else "Bookmarks & Highlights", Icons.Rounded.FormatQuote, onHighlights)
-            MenuRow("Search Book", Icons.Rounded.Search, onSearch)
-            MenuRow("Themes & Settings", Icons.Rounded.TextFields, onSettings)
-            Row(horizontalArrangement = Arrangement.spacedBy(10.dp)) {
-                PillButton("Share", onShare, Modifier.weight(1f), icon = Icons.Rounded.IosShare, height = 56.dp)
-                PillButton("Posts", onPosts, Modifier.weight(1f), icon = Icons.Rounded.AutoAwesome, height = 56.dp)
-            }
-        }
-    }
-}
-
-@Composable
-private fun MenuRow(label: String, icon: androidx.compose.ui.graphics.vector.ImageVector, onClick: () -> Unit, primary: Boolean = false) {
-    val g = LocalG.current
-    val fg = if (primary) g.onPrimary else g.text
-    Row(
-        Modifier.fillMaxWidth().height(58.dp)
-            .then(if (primary) Modifier.clip(CircleShape).background(g.primary.copy(alpha = 0.92f)) else Modifier.panel(CircleShape))
-            .clickable(onClick = onClick).padding(horizontal = 22.dp),
-        verticalAlignment = Alignment.CenterVertically,
-    ) {
-        Text(label, color = fg, fontSize = 18.sp, fontWeight = FontWeight.Medium, modifier = Modifier.weight(1f), maxLines = 1)
-        Icon(icon, null, tint = fg)
     }
 }
 
@@ -1559,15 +1551,33 @@ private fun SearchSheet(chapters: List<Chapter>, onDismiss: () -> Unit, onResult
     }
 }
 
+/**
+ * Everything the reader offers, in one solid sheet: a live preview of the page, the book's contents,
+ * highlights, search, posts and sharing, then the text and page settings.
+ */
 @Composable
-fun ReaderSettingsSheet(vm: AppViewModel, s: ReaderSettings, dark: Boolean, onDismiss: () -> Unit) {
+fun ReaderOptionsSheet(
+    vm: AppViewModel, s: ReaderSettings, dark: Boolean, preview: String, progress: Float, highlightCount: Int,
+    onDismiss: () -> Unit, onContents: () -> Unit, onHighlights: () -> Unit, onSearch: () -> Unit, onShare: () -> Unit, onPosts: () -> Unit,
+) {
     val g = LocalG.current
     val activity = LocalContext.current as? android.app.Activity
     var brightness by remember {
         mutableFloatStateOf(activity?.window?.attributes?.screenBrightness?.takeIf { it >= 0 } ?: 0.5f)
     }
-    GSheet(onDismiss, "Themes & Settings") {
-        Column(Modifier.verticalScroll(rememberScrollState()).padding(horizontal = 20.dp)) {
+    GSheet(onDismiss, "Reading options", full = true, heightFraction = 0.92f) {
+        PagePreview(s, dark, preview, Modifier.padding(horizontal = 20.dp))
+        // A hairline under the fixed preview, so settings scrolling up don't butt against it.
+        HorizontalDivider(Modifier.padding(top = 12.dp), color = g.separator)
+        Column(Modifier.weight(1f).verticalScroll(rememberScrollState()).padding(horizontal = 20.dp)) {
+            Row(Modifier.padding(top = 12.dp), horizontalArrangement = Arrangement.spacedBy(8.dp)) {
+                OptionTile(Icons.Rounded.FormatListBulleted, "Contents", "${(progress * 100).toInt()}%", onContents, Modifier.weight(1f))
+                OptionTile(Icons.Rounded.FormatQuote, "Highlights", if (highlightCount > 0) "$highlightCount" else null, onHighlights, Modifier.weight(1f))
+                OptionTile(Icons.Rounded.Search, "Search", null, onSearch, Modifier.weight(1f))
+                OptionTile(Icons.Rounded.AutoAwesome, "Posts", null, onPosts, Modifier.weight(1f))
+                OptionTile(Icons.Rounded.IosShare, "Share", null, onShare, Modifier.weight(1f))
+            }
+            Text("TEXT & PAGE", style = GType.eyebrow, color = g.text2, modifier = Modifier.padding(top = 22.dp, bottom = 10.dp))
             Row(verticalAlignment = Alignment.CenterVertically) {
                 SegmentCapsule(Modifier.weight(1f), height = 52.dp, tint = g.fill) {
                     CapsuleSegment({ vm.updateSettings { it.copy(fontSize = (it.fontSize - 1).coerceAtLeast(MIN_FONT)) } }, Modifier.weight(1f)) { Text("A", fontSize = 17.sp, color = g.text) }
@@ -1616,6 +1626,48 @@ fun ReaderSettingsSheet(vm: AppViewModel, s: ReaderSettings, dark: Boolean, onDi
                 fontSize = 14.sp, color = g.text2, modifier = Modifier.fillMaxWidth().padding(bottom = 16.dp), textAlign = TextAlign.Center,
             )
         }
+    }
+}
+
+/** The page as it will look with [s]: theme colours, font, size, spacing, margins, weight and alignment. */
+@Composable
+private fun PagePreview(s: ReaderSettings, dark: Boolean, text: String, modifier: Modifier = Modifier) {
+    val g = LocalG.current
+    val rt = ReaderThemes[s.theme.coerceIn(0, ReaderThemes.lastIndex)]
+    val page = if (dark) rt.pageDark else rt.page
+    val ink = if (dark) rt.textDark else rt.text
+    val shape = RoundedCornerShape(22.dp)
+    Box(modifier.fillMaxWidth().height(168.dp).clip(shape).background(page).border(1.dp, g.separator, shape)) {
+        Text(
+            text,
+            style = TextStyle(
+                color = ink, fontSize = s.fontSize.sp, lineHeight = (s.fontSize * s.lineHeight).sp, fontFamily = readingFont(s.font).family,
+                fontWeight = if (s.bold || rt.bold) FontWeight.SemiBold else FontWeight.Normal,
+                textAlign = if (s.justify) TextAlign.Justify else TextAlign.Start, hyphens = Hyphens.Auto,
+                textIndent = TextIndent(firstLine = (s.fontSize * 1.4f).sp),
+            ),
+            modifier = Modifier.padding(horizontal = s.margin.coerceAtMost(48).dp + 4.dp, vertical = 16.dp),
+        )
+        // Fade the cut-off text into the page.
+        Box(Modifier.align(Alignment.BottomCenter).fillMaxWidth().height(40.dp).background(Brush.verticalGradient(listOf(page.copy(alpha = 0f), page))))
+        Text(
+            "Preview", fontSize = 12.sp, fontWeight = FontWeight.SemiBold, color = ink.copy(alpha = 0.6f),
+            // In the faded strip at the bottom, so it never sits on the text.
+            modifier = Modifier.align(Alignment.BottomEnd).padding(10.dp).clip(CircleShape).background(page).border(1.dp, ink.copy(alpha = 0.12f), CircleShape).padding(horizontal = 8.dp, vertical = 3.dp),
+        )
+    }
+}
+
+@Composable
+private fun OptionTile(icon: androidx.compose.ui.graphics.vector.ImageVector, label: String, badge: String?, onClick: () -> Unit, modifier: Modifier = Modifier) {
+    val g = LocalG.current
+    Column(
+        modifier.clip(RoundedCornerShape(18.dp)).background(g.surface).clickable(onClick = onClick).padding(vertical = 12.dp),
+        horizontalAlignment = Alignment.CenterHorizontally,
+    ) {
+        Icon(icon, null, tint = g.accent, modifier = Modifier.size(24.dp))
+        Text(label, fontSize = 12.sp, fontWeight = FontWeight.SemiBold, color = g.text, maxLines = 1, modifier = Modifier.padding(top = 6.dp))
+        Text(badge ?: " ", fontSize = 11.sp, color = g.text2, maxLines = 1)
     }
 }
 
@@ -1734,9 +1786,36 @@ fun PageModeControl(mode: Int, onChange: (Int) -> Unit) {
 fun TrackerOptions(s: ReaderSettings, vm: AppViewModel) {
     val g = LocalG.current
     OptionRow("Reading tracker", "Turn the wheel on the right edge to move a marker through the text", s.tracker) { on -> vm.updateSettings { it.copy(tracker = on) } }
-    if (s.tracker) Row(Modifier.fillMaxWidth().padding(horizontal = 20.dp, vertical = 10.dp), verticalAlignment = Alignment.CenterVertically) {
+    if (!s.tracker) return
+    Row(Modifier.fillMaxWidth().padding(horizontal = 20.dp, vertical = 10.dp), verticalAlignment = Alignment.CenterVertically) {
         Text("Track by", fontSize = 17.sp, color = g.text, modifier = Modifier.weight(1f))
         Segmented(listOf("Word", "Sentence"), s.trackerUnit, { i -> vm.updateSettings { it.copy(trackerUnit = i) } })
+    }
+    Column(Modifier.fillMaxWidth().padding(horizontal = 20.dp, vertical = 10.dp)) {
+        Text("Highlight as you turn", fontSize = 17.sp, color = g.text)
+        Text(
+            if (s.trackerColor < 0) "Off: the wheel only moves the marker" else "Turning the wheel highlights what the marker passes",
+            fontSize = 15.sp, color = g.text2,
+        )
+        Row(Modifier.padding(top = 10.dp), horizontalArrangement = Arrangement.spacedBy(10.dp), verticalAlignment = Alignment.CenterVertically) {
+            Box(
+                Modifier.size(34.dp).clip(CircleShape).background(g.fill)
+                    .border(if (s.trackerColor < 0) 2.5.dp else 0.dp, if (s.trackerColor < 0) g.text else Color.Transparent, CircleShape)
+                    .clickable { vm.updateSettings { it.copy(trackerColor = -1) } },
+                contentAlignment = Alignment.Center,
+            ) { Icon(Icons.Rounded.Close, "Off", tint = g.text2, modifier = Modifier.size(18.dp)) }
+            HighlightColors.forEachIndexed { i, col ->
+                Box(
+                    Modifier.size(34.dp).clip(CircleShape).background(col)
+                        .then(if (s.trackerColor == i) Modifier.border(2.5.dp, g.text, CircleShape) else Modifier)
+                        .clickable { vm.updateSettings { it.copy(trackerColor = i) } },
+                )
+            }
+        }
+    }
+    Row(Modifier.fillMaxWidth().padding(horizontal = 20.dp, vertical = 10.dp), verticalAlignment = Alignment.CenterVertically) {
+        Text("Wheel position", fontSize = 17.sp, color = g.text, modifier = Modifier.weight(1f))
+        Segmented(listOf("Middle", "Bottom"), s.trackerPosition, { i -> vm.updateSettings { it.copy(trackerPosition = i) } })
     }
 }
 

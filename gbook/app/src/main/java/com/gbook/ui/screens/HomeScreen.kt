@@ -2,7 +2,25 @@ package com.gbook.ui.screens
 
 import com.gbook.ui.components.plural
 import com.gbook.ui.components.bottomBarClearance
-import com.gbook.ui.components.bottomBarClearance
+import androidx.compose.animation.core.MutableTransitionState
+import androidx.compose.animation.scaleIn
+import androidx.compose.animation.scaleOut
+import androidx.compose.material.icons.rounded.Check
+import androidx.compose.material.icons.rounded.Dashboard
+import androidx.compose.material.icons.rounded.EventAvailable
+import androidx.compose.material.icons.rounded.KeyboardArrowDown
+import androidx.compose.runtime.rememberCoroutineScope
+import androidx.compose.ui.graphics.TransformOrigin
+import androidx.compose.ui.platform.LocalDensity
+import androidx.compose.ui.unit.IntOffset
+import androidx.compose.ui.window.Popup
+import androidx.compose.ui.window.PopupProperties
+import com.gbook.ui.components.GSheet
+import com.gbook.ui.components.GlassBackdrop
+import com.gbook.ui.components.PillButton
+import com.gbook.ui.components.glass
+import com.gbook.ui.components.pressable
+import kotlinx.coroutines.launch
 import androidx.activity.compose.BackHandler
 import androidx.activity.compose.rememberLauncherForActivityResult
 import androidx.compose.animation.AnimatedVisibility
@@ -110,7 +128,6 @@ import dev.chrisbanes.haze.rememberHazeState
 private enum class Tab(val label: String, val icon: ImageVector, val emoji: Int) {
     Library("Library", Icons.Rounded.LocalLibrary, R.drawable.noto3d_library),
     Feed("Feed", Icons.Rounded.DynamicFeed, R.drawable.noto3d_feed),
-    Highlights("Highlights", Icons.Rounded.FormatQuote, R.drawable.noto3d_highlights),
     Settings("Settings", Icons.Rounded.Settings, R.drawable.noto3d_settings),
     Search("Search", Icons.Rounded.Search, R.drawable.noto3d_search),
 }
@@ -136,7 +153,6 @@ fun HomeScreen(vm: AppViewModel, nav: Nav) {
                 when (t) {
                     Tab.Library -> LibraryTab(vm, nav, onImport = importBooks, onScrollDir = { collapsed = it })
                     Tab.Feed -> FeedTab(vm, nav, onGenerate = { showGenerate = true }, onScrollDir = { collapsed = it })
-                    Tab.Highlights -> HighlightsTab(vm, nav, onScrollDir = { collapsed = it })
                     Tab.Settings -> SettingsTab(vm, settingsPage, { settingsPage = it }, onScrollDir = { collapsed = it })
                     Tab.Search -> SearchTab(vm, nav, onScrollDir = { collapsed = it })
                 }
@@ -202,21 +218,42 @@ fun ScrollDirection(index: Int, offset: Int, onScrollDir: (Boolean) -> Unit) {
     }
 }
 
+/** What the Library tab shows, picked from the menu under its title. */
+private enum class LibraryView(val title: String, val icon: ImageVector) {
+    Overview("Library", Icons.Rounded.Dashboard),
+    Books("All Books", Icons.Rounded.LocalLibrary),
+    Collections("Collections", Icons.Rounded.CollectionsBookmark),
+    Highlights("Highlights", Icons.Rounded.FormatQuote),
+    Plans("Plans", Icons.Rounded.EventAvailable),
+}
+
 @OptIn(ExperimentalFoundationApi::class)
 @Composable
 private fun LibraryTab(vm: AppViewModel, nav: Nav, onImport: () -> Unit, onScrollDir: (Boolean) -> Unit) {
     val g = LocalG.current
     val data by vm.data.collectAsState()
     val books = remember(data.books) { data.books.sortedByDescending { maxOf(it.lastOpenedAt, it.addedAt) } }
+    val plans = remember(data.plans, books) { data.plans.mapNotNull { p -> books.firstOrNull { it.id == p.bookId }?.let { p to it } } }
     val current = books.firstOrNull { it.lastOpenedAt > 0 }
     val grid = rememberLazyGridState()
+    val scope = rememberCoroutineScope()
+    var view by rememberSaveable { mutableStateOf(LibraryView.Overview) }
     var showActivity by remember { mutableStateOf(false) }
     // Long-press a cover to start selecting books, e.g. to group them into a collection.
     val selected = remember { mutableStateListOf<String>() }
     val selecting = selected.isNotEmpty()
     var addToCollection by remember { mutableStateOf<List<String>?>(null) }
     var newCollection by remember { mutableStateOf(false) }
+    var pickPlanBook by remember { mutableStateOf(false) }
+    var planBook by remember { mutableStateOf<Book?>(null) }
+    var hlQuery by rememberSaveable { mutableStateOf("") }
+    // Highlights grouped by book, the book with the newest highlight first.
+    val hlGroups = remember(data.highlights, books) {
+        val byId = books.associateBy { it.id }
+        data.highlights.sortedByDescending { it.createdAt }.groupBy { it.bookId }.mapNotNull { (id, hs) -> byId[id]?.let { it to hs } }
+    }
     BackHandler(selecting) { selected.clear() }
+    BackHandler(!selecting && view != LibraryView.Overview) { view = LibraryView.Overview }
     addToCollection?.let { ids -> AddToCollectionSheet(vm, ids, onDismiss = { addToCollection = null; selected.clear() }) }
     if (newCollection) NameDialog("New Collection", "", "Create", onDismiss = { newCollection = false }) { name ->
         newCollection = false
@@ -225,56 +262,128 @@ private fun LibraryTab(vm: AppViewModel, nav: Nav, onImport: () -> Unit, onScrol
     if (showActivity) ReadingActivitySheet(
         vm, onOpen = { b -> showActivity = false; vm.markOpened(b.id); nav.open(b) }, onDismiss = { showActivity = false },
     )
+    if (pickPlanBook) PlanBookSheet(vm, books.filter { b -> b.progress < 0.995f && plans.none { it.second.id == b.id } }, onDismiss = { pickPlanBook = false }) {
+        pickPlanBook = false; planBook = it
+    }
+    planBook?.let { PlanSheet(vm, it, onDismiss = { planBook = null }) }
     ScrollDirection(grid.firstVisibleItemIndex, grid.firstVisibleItemScrollOffset, onScrollDir)
     LaunchedEffect(selecting) { if (selecting) onScrollDir(true) }
 
+    val showBooks = view == LibraryView.Overview || view == LibraryView.Books
     Box(Modifier.fillMaxSize()) {
+    GlassBackdrop(Modifier.fillMaxSize())
+    // Six columns so book covers can take two each (three across) and collection cards three (two across).
     LazyVerticalGrid(
-        columns = GridCells.Fixed(3),
+        columns = GridCells.Fixed(6),
         state = grid,
         modifier = Modifier.fillMaxSize(),
         contentPadding = PaddingValues(start = 20.dp, end = 20.dp, bottom = bottomBarClearance()),
         horizontalArrangement = Arrangement.spacedBy(16.dp),
         verticalArrangement = Arrangement.spacedBy(22.dp),
     ) {
-        item(span = { GridItemSpan(3) }) {
+        val full: (androidx.compose.foundation.lazy.grid.LazyGridItemSpanScope) -> GridItemSpan = { GridItemSpan(6) }
+        item(span = full) {
             Column(Modifier.statusBarsPadding().padding(top = 62.dp)) {
-                Text("Library", style = GType.largeTitle, color = g.text)
+                LibraryViewPicker(
+                    view,
+                    mapOf(
+                        LibraryView.Books to books.size, LibraryView.Collections to data.collections.size,
+                        LibraryView.Highlights to data.highlights.size, LibraryView.Plans to plans.size,
+                    ),
+                    onPick = { selected.clear(); view = it; scope.launch { grid.scrollToItem(0) } },
+                )
+                when (view) {
+                    LibraryView.Collections -> Text(plural(data.collections.size, "collection"), style = GType.secondary, color = g.text2)
+                    LibraryView.Plans -> Text(plural(plans.size, "plan"), style = GType.secondary, color = g.text2)
+                    LibraryView.Highlights -> Text(
+                        "${data.highlights.size} saved across ${plural(hlGroups.size, "book")}", style = GType.secondary, color = g.text2,
+                    )
+                    else -> Unit
+                }
             }
         }
-        item(span = { GridItemSpan(3) }) {
-            ReadingStatsCard(data.readingLog, data.books.sumOf { it.readingMs }, data.settings.dailyGoalMin, onClick = { showActivity = true })
-        }
-        val plans = data.plans.mapNotNull { p -> books.firstOrNull { it.id == p.bookId }?.let { p to it } }
-        if (plans.isNotEmpty()) item(span = { GridItemSpan(3) }) {
-            Column(verticalArrangement = Arrangement.spacedBy(10.dp)) {
-                Text("Plans", style = GType.section, color = g.text, modifier = Modifier.padding(bottom = 2.dp))
-                plans.forEach { (p, b) -> PlanCard(vm, p, b, onClick = { nav.push(Route.Detail(b.id)) }) }
+        if (view == LibraryView.Overview) {
+            item(span = full) {
+                ReadingStatsCard(data.readingLog, data.books.sumOf { it.readingMs }, data.settings.dailyGoalMin, onClick = { showActivity = true })
             }
-        }
-        if (current != null) {
-            item(span = { GridItemSpan(3) }) {
+            if (plans.isNotEmpty()) item(span = full) {
+                Column(verticalArrangement = Arrangement.spacedBy(10.dp)) {
+                    Text("Plans", style = GType.section, color = g.text, modifier = Modifier.padding(bottom = 2.dp))
+                    plans.forEach { (p, b) -> PlanCard(vm, p, b, onClick = { nav.details(b.id) }, frosted = true) }
+                }
+            }
+            if (current != null) {
+                item(span = full) {
+                    Column {
+                        Text("Continue", style = GType.section, color = g.text, modifier = Modifier.padding(bottom = 12.dp))
+                        ContinueCard(vm, current, onClick = { vm.markOpened(current.id); nav.open(current) })
+                    }
+                }
+            }
+            if (books.isNotEmpty()) item(span = full) {
                 Column {
-                    Text("Continue", style = GType.section, color = g.text, modifier = Modifier.padding(bottom = 12.dp))
-                    ContinueCard(vm, current, onClick = { vm.markOpened(current.id); nav.open(current) })
+                    Row(verticalAlignment = Alignment.Bottom, modifier = Modifier.padding(bottom = 12.dp)) {
+                        Text("Collections", style = GType.section, color = g.text)
+                        Spacer(Modifier.width(8.dp))
+                        if (data.collections.isNotEmpty()) Text("${data.collections.size}", style = GType.secondary, color = g.text2, modifier = Modifier.padding(bottom = 3.dp))
+                    }
+                    CollectionsRow(vm, data.collections, data.books, onOpen = { nav.push(Route.Collection(it.id)) }, onNew = { newCollection = true })
                 }
             }
         }
-        if (books.isNotEmpty()) item(span = { GridItemSpan(3) }) {
-            Column {
-                Row(verticalAlignment = Alignment.Bottom, modifier = Modifier.padding(bottom = 12.dp)) {
-                    Text("Collections", style = GType.section, color = g.text)
-                    Spacer(Modifier.width(8.dp))
-                    if (data.collections.isNotEmpty()) Text("${data.collections.size}", style = GType.secondary, color = g.text2, modifier = Modifier.padding(bottom = 3.dp))
+        if (view == LibraryView.Collections) {
+            val byId = books.associateBy { it.id }
+            items(data.collections, key = { "c-" + it.id }, span = { GridItemSpan(3) }) { c ->
+                CollectionCard(vm, c, c.bookIds.mapNotNull { byId[it] }, Modifier.animateItem()) { nav.push(Route.Collection(c.id)) }
+            }
+            item(key = "c-new", span = { GridItemSpan(3) }) { NewCollectionCard(Modifier.animateItem()) { newCollection = true } }
+        }
+        if (view == LibraryView.Highlights) {
+            val term = hlQuery.trim()
+            val bookHits = if (term.isEmpty()) hlGroups else hlGroups.filter { (b, _) ->
+                b.title.contains(term, ignoreCase = true) || b.author.contains(term, ignoreCase = true)
+            }
+            val textHits = if (term.isEmpty()) emptyList() else hlGroups.flatMap { (b, hs) -> hs.filter { it.matches(term) }.map { it to b } }
+            if (hlGroups.isNotEmpty()) item(span = full) { SearchField(hlQuery, { hlQuery = it }, "Search books or words in highlights") }
+            when {
+                hlGroups.isEmpty() -> item(span = full) {
+                    EmptyState("No highlights yet", "Long-press text while reading, or arm the highlighter on the tracker wheel.", null) {}
                 }
-                CollectionsRow(vm, data.collections, data.books, onOpen = { nav.push(Route.Collection(it.id)) }, onNew = { newCollection = true })
+                bookHits.isEmpty() && textHits.isEmpty() -> item(span = full) {
+                    EmptyState("No matches", "No book or highlight mentions “$term”.", null) {}
+                }
+            }
+            items(bookHits, key = { "hb-" + it.first.id }, span = { GridItemSpan(6) }) { (b, hs) ->
+                HighlightBookRow(vm, b, hs, onClick = { nav.push(Route.Highlights(b.id)) }, Modifier.animateItem())
+            }
+            if (textHits.isNotEmpty()) {
+                item(span = full) { Text("In your highlights", style = GType.section, color = g.text, modifier = Modifier.padding(top = 6.dp)) }
+                items(textHits, key = { "ht-" + it.first.id }, span = { GridItemSpan(6) }) { (h, b) ->
+                    HighlightRow(vm, h, b, nav, Modifier.animateItem(), showBook = true)
+                }
             }
         }
-        item(span = { GridItemSpan(3) }) {
+        if (view == LibraryView.Plans) {
+            if (plans.isEmpty()) item(span = full) {
+                EmptyState("No reading plans", "Pick a book and a finish date. GBook works out the daily pace and can remind you.", "Make a Plan") { pickPlanBook = true }
+            } else {
+                items(plans, key = { "p-" + it.first.bookId }, span = { GridItemSpan(6) }) { (p, b) ->
+                    PlanCard(vm, p, b, onClick = { planBook = b }, Modifier.animateItem(), frosted = true)
+                }
+                item(span = full) {
+                    Box(Modifier.fillMaxWidth(), contentAlignment = Alignment.Center) {
+                        PillButton("New Plan", { pickPlanBook = true }, icon = Icons.Rounded.Add, height = 44.dp)
+                    }
+                }
+            }
+        }
+        if (showBooks) item(span = full) {
             Row(verticalAlignment = Alignment.Bottom) {
-                Text("All Books", style = GType.section, color = g.text)
-                Spacer(Modifier.width(8.dp))
-                Text("${books.size}", style = GType.secondary, color = g.text2, modifier = Modifier.padding(bottom = 3.dp))
+                if (view == LibraryView.Overview) {
+                    Text("All Books", style = GType.section, color = g.text)
+                    Spacer(Modifier.width(8.dp))
+                    Text("${books.size}", style = GType.secondary, color = g.text2, modifier = Modifier.padding(bottom = 3.dp))
+                } else Text(plural(books.size, "book"), style = GType.secondary, color = g.text2, modifier = Modifier.padding(bottom = 4.dp))
                 Spacer(Modifier.weight(1f))
                 if (books.isNotEmpty()) Text(
                     if (selecting) "Done" else "Select", color = g.accent, fontSize = 16.sp, fontWeight = FontWeight.SemiBold,
@@ -282,12 +391,12 @@ private fun LibraryTab(vm: AppViewModel, nav: Nav, onImport: () -> Unit, onScrol
                 )
             }
         }
-        if (books.isEmpty()) {
-            item(span = { GridItemSpan(3) }) {
+        if (showBooks && books.isEmpty()) {
+            item(span = full) {
                 EmptyState("Your library is empty", "Add EPUB or PDF books from your phone or Google Drive.", "Add Books", onImport)
             }
         }
-        items(books, key = { it.id }) { b ->
+        if (showBooks) items(books, key = { it.id }, span = { GridItemSpan(2) }) { b ->
             val on = b.id in selected
             Column(Modifier.animateItem()) {
                 Box(
@@ -323,7 +432,7 @@ private fun LibraryTab(vm: AppViewModel, nav: Nav, onImport: () -> Unit, onScrol
                     }
                     Spacer(Modifier.weight(1f))
                     Icon(Icons.Rounded.MoreHoriz, "Details", tint = g.text2,
-                        modifier = Modifier.size(22.dp).clip(CircleShape).clickable { nav.push(Route.Detail(b.id)) })
+                        modifier = Modifier.size(22.dp).clip(CircleShape).clickable { nav.details(b.id) })
                 }
             }
         }
@@ -339,25 +448,107 @@ private fun LibraryTab(vm: AppViewModel, nav: Nav, onImport: () -> Unit, onScrol
     }
 }
 
+/** The Library title doubles as a menu button: tap it to switch between the overview, books, collections and plans. */
+@Composable
+private fun LibraryViewPicker(view: LibraryView, counts: Map<LibraryView, Int>, onPick: (LibraryView) -> Unit) {
+    val g = LocalG.current
+    var open by remember { mutableStateOf(false) }
+    val menu = remember { MutableTransitionState(false) }.apply { targetState = open }
+    val turn by animateFloatAsState(if (open) 180f else 0f, label = "chevron")
+    val drop = with(LocalDensity.current) { 52.dp.roundToPx() }
+    Box {
+        Row(Modifier.pressable({ open = true }), verticalAlignment = Alignment.CenterVertically) {
+            Text(view.title, style = GType.largeTitle, color = g.text)
+            Spacer(Modifier.width(10.dp))
+            Box(Modifier.size(32.dp).glass(CircleShape), contentAlignment = Alignment.Center) {
+                Icon(
+                    Icons.Rounded.KeyboardArrowDown, "Choose what to show", tint = g.text,
+                    modifier = Modifier.size(24.dp).graphicsLayer { rotationZ = turn },
+                )
+            }
+        }
+        if (menu.currentState || menu.targetState) Popup(
+            offset = IntOffset(0, drop), onDismissRequest = { open = false }, properties = PopupProperties(focusable = true),
+        ) {
+            AnimatedVisibility(
+                menu,
+                enter = fadeIn() + scaleIn(initialScale = 0.9f, transformOrigin = TransformOrigin(0.1f, 0f)),
+                exit = fadeOut() + scaleOut(targetScale = 0.9f, transformOrigin = TransformOrigin(0.1f, 0f)),
+            ) {
+                Column(Modifier.padding(4.dp).width(260.dp).panel(RoundedCornerShape(24.dp), tint = g.sheet, elevation = 12.dp).padding(vertical = 6.dp)) {
+                    LibraryView.entries.forEach { v ->
+                        val on = v == view
+                        Row(
+                            Modifier.fillMaxWidth().clickable { open = false; if (!on) onPick(v) }.padding(horizontal = 18.dp, vertical = 13.dp),
+                            verticalAlignment = Alignment.CenterVertically,
+                        ) {
+                            Icon(v.icon, null, tint = if (on) g.accent else g.text2, modifier = Modifier.size(22.dp))
+                            Text(
+                                v.title, fontSize = 17.sp, fontWeight = if (on) FontWeight.SemiBold else FontWeight.Medium, color = g.text,
+                                modifier = Modifier.weight(1f).padding(start = 14.dp),
+                            )
+                            counts[v]?.let { Text("$it", fontSize = 15.sp, color = g.text2) }
+                            Box(Modifier.padding(start = 10.dp).size(20.dp)) {
+                                if (on) Icon(Icons.Rounded.Check, "Showing", tint = g.accent, modifier = Modifier.size(20.dp))
+                            }
+                        }
+                    }
+                }
+            }
+        }
+    }
+}
+
+/** Books that could get a reading plan; tapping one opens its plan sheet. */
+@Composable
+private fun PlanBookSheet(vm: AppViewModel, books: List<Book>, onDismiss: () -> Unit, onPick: (Book) -> Unit) {
+    val g = LocalG.current
+    GSheet(onDismiss, "Plan which book?", full = true, heightFraction = 0.8f) {
+        if (books.isEmpty()) Text(
+            "Every unfinished book already has a plan.", style = GType.secondary, color = g.text2,
+            modifier = Modifier.padding(horizontal = 24.dp, vertical = 20.dp),
+        )
+        LazyColumn(Modifier.weight(1f), contentPadding = PaddingValues(bottom = 24.dp)) {
+            items(books, key = { it.id }) { b ->
+                Row(
+                    Modifier.fillMaxWidth().clickable { onPick(b) }.padding(horizontal = 24.dp, vertical = 10.dp),
+                    verticalAlignment = Alignment.CenterVertically,
+                ) {
+                    BookCover(vm.coverPath(b), b.title, b.author, b.coverColor, Modifier.height(56.dp), elevation = 3.dp)
+                    Column(Modifier.weight(1f).padding(start = 14.dp)) {
+                        Text(b.title, fontSize = 16.sp, color = g.text, maxLines = 2, overflow = TextOverflow.Ellipsis)
+                        Text(
+                            b.author + if (b.progress > 0f) " · ${(b.progress * 100).toInt()}%" else "",
+                            fontSize = 14.sp, color = g.text2, maxLines = 1, overflow = TextOverflow.Ellipsis,
+                        )
+                    }
+                }
+            }
+        }
+    }
+}
+
+/** Last-read book: a glass card washed very lightly with the cover's colour. */
 @Composable
 private fun ContinueCard(vm: AppViewModel, b: Book, onClick: () -> Unit) {
-    val c = Color(b.coverColor)
+    val g = LocalG.current
+    val wash = androidx.compose.ui.graphics.lerp(g.bg, Color(b.coverColor), 0.5f).copy(alpha = if (g.dark) 0.35f else 0.22f)
     Row(
-        Modifier.fillMaxWidth().height(116.dp).clip(RoundedCornerShape(22.dp))
-            .background(Brush.horizontalGradient(listOf(c, c.copy(alpha = 0.78f))))
+        Modifier.fillMaxWidth().height(116.dp).glass(RoundedCornerShape(22.dp))
+            .background(Brush.horizontalGradient(listOf(wash, Color.Transparent)))
             .clickable(onClick = onClick).padding(14.dp),
         verticalAlignment = Alignment.CenterVertically,
     ) {
         BookCover(vm.coverPath(b), b.title, b.author, b.coverColor, Modifier.height(88.dp), elevation = 6.dp)
         Spacer(Modifier.width(14.dp))
         Column(Modifier.weight(1f)) {
-            Text(b.title, color = Color.White, fontFamily = DisplaySerif, fontWeight = FontWeight.Bold, fontSize = 18.sp, maxLines = 2, overflow = TextOverflow.Ellipsis)
-            Text(b.author, color = Color.White.copy(alpha = 0.8f), fontSize = 15.sp, maxLines = 1)
+            Text(b.title, color = g.text, fontFamily = DisplaySerif, fontWeight = FontWeight.Bold, fontSize = 18.sp, maxLines = 2, overflow = TextOverflow.Ellipsis)
+            Text(b.author, color = g.text2, fontSize = 15.sp, maxLines = 1)
             Spacer(Modifier.height(10.dp))
-            Box(Modifier.fillMaxWidth().height(4.dp).clip(CircleShape).background(Color.White.copy(alpha = 0.25f))) {
-                Box(Modifier.fillMaxWidth(b.progress.coerceAtLeast(0.01f)).height(4.dp).background(Color.White))
+            Box(Modifier.fillMaxWidth().height(4.dp).clip(CircleShape).background(g.fill)) {
+                Box(Modifier.fillMaxWidth(b.progress.coerceAtLeast(0.01f)).height(4.dp).clip(CircleShape).background(g.accentBrush))
             }
-            Text("${(b.progress * 100).toInt()}%" + (if (b.readingMs > 60_000) " · ${formatDuration(b.readingMs)} read" else "") + " · Tap to continue", color = Color.White.copy(alpha = 0.85f), fontSize = 13.sp, modifier = Modifier.padding(top = 6.dp))
+            Text("${(b.progress * 100).toInt()}%" + (if (b.readingMs > 60_000) " · ${formatDuration(b.readingMs)} read" else "") + " · Tap to continue", color = g.text2, fontSize = 13.sp, modifier = Modifier.padding(top = 6.dp))
         }
     }
 }
@@ -369,75 +560,5 @@ fun EmptyState(title: String, body: String, action: String?, onAction: () -> Uni
         Text(title, style = GType.section, color = g.text)
         Text(body, style = GType.secondary, color = g.text2, modifier = Modifier.padding(top = 8.dp, bottom = 20.dp), textAlign = androidx.compose.ui.text.style.TextAlign.Center)
         if (action != null) com.gbook.ui.components.PrimaryButton(action, onAction)
-    }
-}
-
-@Composable
-private fun HighlightsTab(vm: AppViewModel, nav: Nav, onScrollDir: (Boolean) -> Unit) {
-    val g = LocalG.current
-    val data by vm.data.collectAsState()
-    val groups = remember(data.highlights, data.books) {
-        data.highlights.sortedByDescending { it.createdAt }.groupBy { it.bookId }
-            .mapNotNull { (id, hs) -> data.books.firstOrNull { it.id == id }?.let { it to hs } }
-    }
-    val list = rememberLazyListState()
-    ScrollDirection(list.firstVisibleItemIndex, list.firstVisibleItemScrollOffset, onScrollDir)
-    LazyColumn(state = list, modifier = Modifier.fillMaxSize(), contentPadding = PaddingValues(bottom = bottomBarClearance())) {
-        item {
-            Box(Modifier.statusBarsPadding().padding(top = 48.dp)) {
-                LargeTitle("Highlights", "${data.highlights.size} saved across ${plural(groups.size, "book")}")
-            }
-        }
-        if (groups.isEmpty()) item {
-            EmptyState("No highlights yet", "Long-press any sentence while reading, drag to select, then pick a colour.", null) {}
-        }
-        groups.forEach { (book, hs) ->
-            item(key = "h-" + book.id) {
-                Row(Modifier.padding(start = 20.dp, end = 20.dp, top = 18.dp, bottom = 10.dp), verticalAlignment = Alignment.CenterVertically) {
-                    BookCover(vm.coverPath(book), book.title, book.author, book.coverColor, Modifier.height(44.dp), elevation = 3.dp)
-                    Spacer(Modifier.width(12.dp))
-                    Column(Modifier.weight(1f)) {
-                        Text(book.title, style = GType.navTitle, color = g.text, maxLines = 1, overflow = TextOverflow.Ellipsis)
-                        Text(plural(hs.size, "highlight"), style = GType.caption, color = g.text2)
-                    }
-                }
-            }
-            items(hs, key = { it.id }) { h -> HighlightRow(vm, h, book, nav) }
-        }
-    }
-}
-
-@Composable
-private fun HighlightRow(vm: AppViewModel, h: Highlight, book: Book, nav: Nav) {
-    val g = LocalG.current
-    Row(
-        Modifier.padding(horizontal = 20.dp, vertical = 5.dp).fillMaxWidth().clip(RoundedCornerShape(22.dp))
-            .background(g.grouped).clickable {
-                vm.markOpened(book.id)
-                nav.push(Route.Reader(book.id, h.chapter, h.block))
-            }.padding(16.dp),
-    ) {
-        Box(Modifier.width(4.dp).height(48.dp).clip(CircleShape).background(HighlightColors[h.color % HighlightColors.size]))
-        Spacer(Modifier.width(12.dp))
-        Column(Modifier.weight(1f)) {
-            Text("“${h.text}”", fontFamily = QuoteSerif, fontSize = 17.sp, lineHeight = 24.sp, color = g.text, maxLines = 6, overflow = TextOverflow.Ellipsis)
-            if (!h.note.isNullOrBlank()) Text(h.note, style = GType.secondary, color = g.text2, modifier = Modifier.padding(top = 6.dp))
-        }
-        // Reaction: shows the chosen emoji, or an add-reaction button; tap to pick.
-        var picking by remember { mutableStateOf(false) }
-        Box(Modifier.padding(start = 8.dp)) {
-            Box(
-                Modifier.size(36.dp).clip(CircleShape).background(if (h.reaction != null) g.accent.copy(alpha = 0.15f) else g.fill)
-                    .clickable { picking = true },
-                contentAlignment = Alignment.Center,
-            ) {
-                if (h.reaction != null) Text(h.reaction, fontSize = 18.sp)
-                else Icon(Icons.Rounded.AddReaction, "React", tint = g.text2, modifier = Modifier.size(20.dp))
-            }
-            if (picking) ReactionPicker(
-                onPick = { vm.reactHighlight(h.id, it); picking = false }, onDismiss = { picking = false },
-                alignment = Alignment.BottomEnd, offsetY = -120,
-            )
-        }
     }
 }

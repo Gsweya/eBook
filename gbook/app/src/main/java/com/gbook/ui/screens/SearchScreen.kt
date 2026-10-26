@@ -146,7 +146,7 @@ fun SearchTab(vm: AppViewModel, nav: Nav, onScrollDir: (Boolean) -> Unit) {
             items(books, key = { "b-" + it.id }) { b ->
                 ResultRow(
                     onClick = { open(b) },
-                    onLongClick = { focusManager.clearFocus(); nav.push(Route.Detail(b.id)) },
+                    onLongClick = { focusManager.clearFocus(); nav.details(b.id) },
                     leading = { BookCover(vm.coverPath(b), b.title, b.author, b.coverColor, Modifier.height(56.dp), elevation = 3.dp) },
                     title = highlight(b.title, term),
                     subtitle = listOfNotNull(

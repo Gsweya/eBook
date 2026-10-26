@@ -15,8 +15,8 @@ android {
         applicationId = "com.gbook"
         minSdk = 26
         targetSdk = 36
-        versionCode = 4
-        versionName = "1.2.0"
+        versionCode = 5
+        versionName = "1.3.0"
     }
     // Release signing reads a local, git-ignored keystore.properties (storeFile, storePassword, keyAlias, keyPassword).
     val keystoreProps = rootProject.file("keystore.properties").takeIf { it.exists() }?.let { f ->

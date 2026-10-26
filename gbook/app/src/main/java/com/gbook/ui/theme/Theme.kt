@@ -17,6 +17,7 @@ import androidx.compose.runtime.staticCompositionLocalOf
 import androidx.compose.ui.graphics.Brush
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.graphics.SolidColor
+import androidx.compose.ui.graphics.lerp
 import androidx.compose.runtime.remember
 import androidx.compose.ui.text.TextStyle
 import androidx.compose.ui.text.font.FontFamily
@@ -47,7 +48,11 @@ data class GColors(
     val toggleOn: Color,
     val dark: Boolean,
 ) {
-    val accentBrush: Brush get() = if (accentGradient.size >= 2) Brush.linearGradient(accentGradient) else SolidColor(accent)
+    /**
+     * Accent fill for bars, badges and the active tab: the accent with a faint lift towards one edge, so it
+     * reads as soft rather than flat. The palette's full [accentGradient] is only shown on its theme swatch.
+     */
+    val accentBrush: Brush get() = Brush.linearGradient(listOf(lerp(accent, Color.White, 0.16f), accent))
 }
 
 /**

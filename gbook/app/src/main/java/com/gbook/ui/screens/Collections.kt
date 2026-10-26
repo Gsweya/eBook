@@ -76,7 +76,9 @@ import com.gbook.ui.components.GSheet
 import com.gbook.ui.components.IconCircle
 import com.gbook.ui.components.PillButton
 import com.gbook.ui.components.PrimaryButton
+import com.gbook.ui.components.glass
 import com.gbook.ui.components.panel
+import com.gbook.ui.components.pressable
 import com.gbook.ui.theme.AppSans
 import com.gbook.ui.theme.GType
 import com.gbook.ui.theme.LocalG
@@ -97,10 +99,10 @@ fun CollectionsRow(vm: AppViewModel, collections: List<BookCollection>, books: L
 @Composable
 fun CollectionCard(vm: AppViewModel, c: BookCollection, books: List<Book>, modifier: Modifier = Modifier, onClick: () -> Unit) {
     val g = LocalG.current
-    Column(modifier.clip(RoundedCornerShape(22.dp)).clickable(onClick = onClick)) {
+    // Only the tile is rounded; clipping the whole card would shave the corners off the labels below it.
+    Column(modifier.pressable(onClick)) {
         Box(
-            Modifier.fillMaxWidth().aspectRatio(1.15f).clip(RoundedCornerShape(22.dp)).background(g.grouped)
-                .border(0.75.dp, g.separator, RoundedCornerShape(22.dp)),
+            Modifier.fillMaxWidth().aspectRatio(1.15f).glass(RoundedCornerShape(22.dp)),
             contentAlignment = Alignment.Center,
         ) {
             val shown = books.take(3)
@@ -121,12 +123,11 @@ fun CollectionCard(vm: AppViewModel, c: BookCollection, books: List<Book>, modif
 }
 
 @Composable
-private fun NewCollectionCard(modifier: Modifier, onClick: () -> Unit) {
+fun NewCollectionCard(modifier: Modifier, onClick: () -> Unit) {
     val g = LocalG.current
-    Column(modifier.clip(RoundedCornerShape(22.dp)).clickable(onClick = onClick)) {
+    Column(modifier.pressable(onClick)) {
         Box(
-            Modifier.fillMaxWidth().aspectRatio(1.15f).clip(RoundedCornerShape(22.dp))
-                .border(1.5.dp, g.separator, RoundedCornerShape(22.dp)),
+            Modifier.fillMaxWidth().aspectRatio(1.15f).glass(RoundedCornerShape(22.dp)),
             contentAlignment = Alignment.Center,
         ) {
             Box(Modifier.size(48.dp).clip(CircleShape).background(g.accent.copy(alpha = 0.15f)), contentAlignment = Alignment.Center) {

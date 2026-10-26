@@ -64,6 +64,7 @@ import com.gbook.data.planStatus
 import com.gbook.ui.components.BookCover
 import com.gbook.ui.components.GSheet
 import com.gbook.ui.components.GSwitch
+import com.gbook.ui.components.glass
 import com.gbook.ui.components.PrimaryButton
 import com.gbook.ui.components.panel
 import com.gbook.ui.theme.DisplaySerif
@@ -298,7 +299,7 @@ fun SelectChip(label: String, selected: Boolean, onClick: () -> Unit) {
 
 /** Plan summary: target date, days left, daily pace, a progress bar with the on-schedule marker, and status. */
 @Composable
-fun PlanCard(vm: AppViewModel, plan: ReadingPlan, book: Book, onClick: () -> Unit, modifier: Modifier = Modifier) {
+fun PlanCard(vm: AppViewModel, plan: ReadingPlan, book: Book, onClick: () -> Unit, modifier: Modifier = Modifier, frosted: Boolean = false) {
     val g = LocalG.current
     val st = planStatus(plan, book)
     val onTrack = st.onTrack(book.progress)
@@ -309,8 +310,12 @@ fun PlanCard(vm: AppViewModel, plan: ReadingPlan, book: Book, onClick: () -> Uni
         else -> "Behind" to Behind
     }
     Row(
-        modifier.fillMaxWidth().clip(RoundedCornerShape(22.dp)).background(g.surface)
-            .border(0.75.dp, g.separator.copy(alpha = if (g.dark) 0.55f else 1f), RoundedCornerShape(22.dp))
+        modifier.fillMaxWidth()
+            .then(
+                if (frosted) Modifier.glass(RoundedCornerShape(22.dp))
+                else Modifier.clip(RoundedCornerShape(22.dp)).background(g.surface)
+                    .border(0.75.dp, g.separator.copy(alpha = if (g.dark) 0.55f else 1f), RoundedCornerShape(22.dp)),
+            )
             .clickable(onClick = onClick).padding(14.dp),
         verticalAlignment = Alignment.CenterVertically,
     ) {

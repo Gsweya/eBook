@@ -40,6 +40,8 @@ data class Book(
     val readingMs: Long = 0,
     /** Pages the reader has dwelt on long enough to count as read, in either reading mode. */
     val pagesRead: Int = 0,
+    /** The reader's own rating, 1 to 5 stars; 0 means not rated. */
+    val rating: Int = 0,
 )
 
 @Serializable
@@ -127,6 +129,10 @@ data class ReaderSettings(
     val tracker: Boolean = false,
     /** Tracker step: 0 word, 1 sentence. */
     val trackerUnit: Int = 0,
+    /** Highlight colour the wheel paints with as it turns (index into HighlightColors); -1 means it only tracks. */
+    val trackerColor: Int = -1,
+    /** Where the wheel sits on the right edge: 0 middle, 1 bottom. */
+    val trackerPosition: Int = 0,
 )
 
 @Serializable

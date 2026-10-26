@@ -33,6 +33,9 @@ import androidx.compose.runtime.Composable
 import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.collectAsState
 import androidx.compose.runtime.getValue
+import androidx.compose.runtime.mutableStateOf
+import androidx.compose.runtime.saveable.rememberSaveable
+import androidx.compose.runtime.setValue
 import androidx.compose.runtime.mutableStateListOf
 import androidx.compose.runtime.remember
 import androidx.compose.runtime.saveable.rememberSaveableStateHolder
@@ -43,7 +46,8 @@ import androidx.compose.ui.unit.sp
 import com.gbook.data.Book
 import com.gbook.data.BookFormat
 import com.gbook.ui.components.panel
-import com.gbook.ui.screens.BookDetailScreen
+import com.gbook.ui.screens.BookHighlightsScreen
+import com.gbook.ui.screens.BookSheet
 import com.gbook.ui.screens.WelcomeFlow
 import com.gbook.ui.screens.CollectionScreen
 import com.gbook.ui.screens.HomeScreen
@@ -58,13 +62,14 @@ import kotlinx.coroutines.flow.MutableStateFlow
 sealed interface Route {
     val key: String
     data object Home : Route { override val key = "home" }
-    data class Detail(val id: String) : Route { override val key = "detail/$id" }
+    data class Highlights(val id: String) : Route { override val key = "highlights/$id" }
     data class Reader(val id: String, val chapter: Int? = null, val block: Int? = null) : Route { override val key = "reader/$id/$chapter/$block" }
     data class Pdf(val id: String) : Route { override val key = "pdf/$id" }
     data class Collection(val id: String) : Route { override val key = "collection/$id" }
 }
 
-class Nav(val push: (Route) -> Unit, val pop: () -> Unit) {
+/** [details] opens a book's options sheet over whatever screen is showing. */
+class Nav(val push: (Route) -> Unit, val pop: () -> Unit, val details: (String) -> Unit) {
     fun open(b: Book) = push(if (b.format == BookFormat.PDF) Route.Pdf(b.id) else Route.Reader(b.id))
 }
 
@@ -98,7 +103,10 @@ class MainActivity : ComponentActivity() {
 @Composable
 fun App(vm: AppViewModel, pendingOpen: MutableStateFlow<Uri?>, pendingBook: MutableStateFlow<String?>) {
     val stack = remember { mutableStateListOf<Route>(Route.Home) }
-    val nav = remember { Nav(push = { stack.add(it) }, pop = { if (stack.size > 1) stack.removeAt(stack.lastIndex) }) }
+    var detailsFor by rememberSaveable { mutableStateOf<String?>(null) }
+    val nav = remember {
+        Nav(push = { stack.add(it) }, pop = { if (stack.size > 1) stack.removeAt(stack.lastIndex) }, details = { detailsFor = it })
+    }
     val holder = rememberSaveableStateHolder()
     val pending by pendingOpen.collectAsState()
     val bookToOpen by pendingBook.collectAsState()
@@ -128,13 +136,14 @@ fun App(vm: AppViewModel, pendingOpen: MutableStateFlow<Uri?>, pendingBook: Muta
             holder.SaveableStateProvider(route.key) {
                 when (route) {
                     Route.Home -> HomeScreen(vm, nav)
-                    is Route.Detail -> BookDetailScreen(vm, route.id, nav)
+                    is Route.Highlights -> BookHighlightsScreen(vm, route.id, nav)
                     is Route.Reader -> ReaderScreen(vm, route.id, route.chapter, route.block, onBack = nav.pop)
                     is Route.Pdf -> PdfScreen(vm, route.id, onBack = nav.pop)
                     is Route.Collection -> CollectionScreen(vm, route.id, nav)
                 }
             }
         }
+        detailsFor?.let { BookSheet(vm, it, nav, onDismiss = { detailsFor = null }) }
         // First run: splash, profile and first books, fading away into the library when done.
         val onboarded = vm.data.collectAsState().value.onboarded
         AnimatedVisibility(!onboarded, enter = fadeIn(tween(0)), exit = fadeOut(tween(450))) { WelcomeFlow(vm) }

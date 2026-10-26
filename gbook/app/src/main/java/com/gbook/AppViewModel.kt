@@ -195,6 +195,9 @@ class AppViewModel(app: Application) : AndroidViewModel(app) {
 
     fun reactBook(id: String, emoji: String) = store.updateBook(id) { b -> b.copy(reactions = toggle(b.reactions, b.myReaction, emoji), myReaction = if (b.myReaction == emoji) null else emoji) }
 
+    /** Rates [id] [stars] out of 5; rating it the same again clears the rating. */
+    fun rateBook(id: String, stars: Int) = store.updateBook(id) { b -> b.copy(rating = if (b.rating == stars) 0 else stars) }
+
     fun reactPost(id: String, emoji: String) = store.update { d ->
         d.copy(posts = d.posts.map { p -> if (p.id != id) p else p.copy(reactions = toggle(p.reactions, p.myReaction, emoji), myReaction = if (p.myReaction == emoji) null else emoji) })
     }

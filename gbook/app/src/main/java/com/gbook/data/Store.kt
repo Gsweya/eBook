@@ -77,6 +77,7 @@ class Store(private val ctx: Context) {
                 books = d.books.filterNot { it.id == id },
                 highlights = d.highlights.filterNot { it.bookId == id },
                 posts = d.posts.filterNot { it.bookId == id },
+                collections = d.collections.map { c -> if (id in c.bookIds) c.copy(bookIds = c.bookIds - id) else c },
             )
         }
         contentCache.remove(id)

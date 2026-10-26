@@ -1,6 +1,16 @@
 package com.gbook.ui.screens
 
 import androidx.compose.animation.AnimatedVisibility
+import androidx.compose.animation.core.Animatable
+import androidx.compose.animation.core.tween
+import androidx.compose.foundation.gestures.animateScrollBy
+import androidx.compose.foundation.gestures.detectHorizontalDragGestures
+import androidx.compose.foundation.layout.fillMaxHeight
+import androidx.compose.ui.geometry.Size
+import androidx.compose.ui.platform.LocalFontFamilyResolver
+import androidx.compose.ui.unit.IntSize
+import androidx.compose.material.icons.rounded.SwipeVertical
+import androidx.compose.material.icons.rounded.AutoStories
 import androidx.compose.ui.text.drawText
 import androidx.compose.ui.text.rememberTextMeasurer
 import com.gbook.data.ReactionEmojis
@@ -21,6 +31,7 @@ import androidx.compose.ui.platform.LocalDensity
 import androidx.compose.ui.unit.Constraints
 import com.gbook.ui.components.rememberHaptics
 import com.gbook.ui.components.TrackReadingTime
+import com.gbook.ui.components.GoalBanner
 import androidx.compose.ui.draw.drawWithContent
 import androidx.compose.ui.draw.shadow
 import androidx.compose.ui.draw.drawBehind
@@ -208,6 +219,9 @@ private data class Sel(val start: TextPos, val end: TextPos) {
     }
 }
 
+/** Reading-tracker position: unit [unit] (a word or sentence) of paragraph [block]. */
+private data class Track(val block: Int, val unit: Int)
+
 /** Live layout of an on-screen paragraph, used to hit-test selection drags across paragraphs. */
 private class ParaRef {
     var layout: TextLayoutResult? = null
@@ -289,13 +303,11 @@ private fun ReaderContent(
         } else LazyListState()
     }
     var pendingJump by remember { mutableStateOf<Int?>(null) }
-    LaunchedEffect(listState, pendingJump) {
-        pendingJump?.let { listState.scrollToItem(it); pendingJump = null }
-    }
     val ch = chapters[chapter]
+    /** Opens [chapterIdx] at [block]; a negative block lands on the chapter's last page. */
     fun goTo(chapterIdx: Int, block: Int = 0) {
         val target = chapterIdx.coerceIn(0, chapters.lastIndex)
-        if (target == chapter) scope.launch { listState.scrollToItem(block) } else { chapter = target; pendingJump = block }
+        if (target == chapter) scope.launch { listState.scrollToItem(if (block < 0) ch.blocks.size else block) } else { chapter = target; pendingJump = block }
     }
 
     var chrome by rememberSaveable { mutableStateOf(false) }
@@ -374,6 +386,191 @@ private fun ReaderContent(
     )
     val top = WindowInsets.statusBars.asPaddingValues().calculateTopPadding()
     val bottom = WindowInsets.navigationBars.asPaddingValues().calculateBottomPadding()
+    val paged = s.pageMode == 1
+    val topPad = top + 56.dp
+    val bottomPad = bottom + if (paged) 72.dp else 96.dp
+    var viewport by remember { mutableStateOf(IntSize.Zero) }
+    fun contentTop() = with(density) { topPad.toPx() }
+    fun contentBottom() = viewport.height - with(density) { bottomPad.toPx() }
+    fun pageH() = (contentBottom() - contentTop()).coerceAtLeast(1f)
+    fun lineH() = with(density) { (s.fontSize * s.lineHeight).sp.toPx() }
+
+    // Estimated page layout for "page N of M"; recomputed (after a short pause) whenever the text settings change.
+    val fontResolver = LocalFontFamilyResolver.current
+    val pageMap by produceState<PageMap?>(null, chapters, s.fontSize, s.lineHeight, s.font, weight, s.justify, s.margin, viewport, paged) {
+        if (viewport.height == 0) return@produceState
+        delay(250)
+        val bodyFace = fontResolver.resolve(family, weight).value as? android.graphics.Typeface ?: android.graphics.Typeface.SERIF
+        val boldFace = fontResolver.resolve(family, FontWeight.Bold).value as? android.graphics.Typeface ?: android.graphics.Typeface.DEFAULT_BOLD
+        val m = with(density) {
+            PageMetrics(
+                width = viewport.width - 2 * s.margin.dp.roundToPx(), pageH = pageH(), textPx = s.fontSize.sp.toPx(),
+                lineHeightPx = lineH(), indentPx = (s.fontSize * 1.4f).sp.roundToPx(), paraGapPx = (s.fontSize * 0.45f).dp.toPx(),
+                justify = s.justify, body = bodyFace, bold = boldFace, dp = density.density,
+            )
+        }
+        value = measurePages(chapters, m) { src -> imageBounds(vm.imagePath(book.id, src)) }
+    }
+    /** Current page within the chapter (0-based), or null until the page map is ready. */
+    val pageInChapter by remember(listState, chapter) {
+        derivedStateOf {
+            val pm = pageMap ?: return@derivedStateOf null
+            if (!listState.canScrollForward) pm.pagesIn(chapter) - 1
+            else pm.pageIn(chapter, listState.firstVisibleItemIndex, listState.firstVisibleItemScrollOffset)
+        }
+    }
+    // A page counts as read once it has stayed on screen for a few seconds, in either mode.
+    val countedPages = remember { HashSet<String>() }
+    LaunchedEffect(chapter, pageInChapter) {
+        val p = pageInChapter ?: return@LaunchedEffect
+        delay(4_000)
+        if (countedPages.add("$chapter:$p")) vm.addPagesRead(book.id)
+    }
+
+    /** Root-y of an on-screen list item's top edge. */
+    fun itemTop(info: androidx.compose.foundation.lazy.LazyListItemInfo) = (info.offset - listState.layoutInfo.viewportStartOffset).toFloat()
+
+    /** In page mode: root-y where the current page ends, the top of the first line or block that doesn't fully fit. */
+    fun pageCut(): Float {
+        val cb = contentBottom()
+        for (it in listState.layoutInfo.visibleItemsInfo) {
+            val t = itemTop(it)
+            if (t + it.size <= cb + 0.5f) continue
+            if (t >= cb) return t
+            val l = paras[it.index]?.layout ?: return t
+            for (line in 0 until l.lineCount) if (t + l.getLineBottom(line) > cb + 0.5f) return t + l.getLineTop(line)
+            return t + l.size.height
+        }
+        return cb
+    }
+
+    /** Snaps the page so no line is cut by its top edge: [forward] hides the cut line, otherwise shows it whole. */
+    suspend fun alignTop(forward: Boolean) {
+        val ct = contentTop()
+        for (it in listState.layoutInfo.visibleItemsInfo) {
+            val t = itemTop(it)
+            if (t + it.size <= ct + 0.5f) continue
+            if (t >= ct - 0.5f) return
+            val l = paras[it.index]?.layout
+            if (l == null) {
+                if (it.size < pageH()) listState.scrollBy(if (forward) t + it.size - ct else t - ct)
+                return
+            }
+            for (line in 0 until l.lineCount) {
+                val lt = t + l.getLineTop(line); val lb = t + l.getLineBottom(line)
+                if (lb <= ct + 0.5f) continue
+                if (lt < ct - 0.5f) listState.scrollBy(if (forward) lb - ct else lt - ct)
+                return
+            }
+            return
+        }
+    }
+
+    // Page turns: content slides and fades a little in the direction of travel.
+    val turnAnim = remember { Animatable(0f) }
+    val turning = remember { BooleanArray(1) }
+    fun turnPage(forward: Boolean) {
+        if (turning[0]) return
+        turning[0] = true
+        scope.launch {
+            try {
+                val dir = if (forward) 1f else -1f
+                if (forward && !listState.canScrollForward) { if (chapter < chapters.lastIndex) { turnAnim.animateTo(dir, tween(110)); goTo(chapter + 1) } else return@launch }
+                else if (!forward && !listState.canScrollBackward) { if (chapter > 0) { turnAnim.animateTo(dir, tween(110)); goTo(chapter - 1, -1) } else return@launch }
+                else {
+                    turnAnim.animateTo(dir, tween(110))
+                    if (forward) {
+                        val d = pageCut() - contentTop()
+                        listState.scrollBy(if (d < lineH()) pageH() else d)
+                    } else {
+                        listState.scrollBy(-pageH())
+                        withFrameNanos { }
+                        alignTop(forward = true)
+                    }
+                }
+                turnAnim.snapTo(-dir)
+                turnAnim.animateTo(0f, tween(180))
+            } finally { turning[0] = false }
+        }
+    }
+    LaunchedEffect(listState, pendingJump) {
+        val j = pendingJump ?: return@LaunchedEffect
+        listState.scrollToItem(if (j < 0) ch.blocks.size else j)
+        pendingJump = null
+        if (paged) { withFrameNanos { }; alignTop(forward = j < 0) }
+    }
+    // Page mode starts each page on a whole line, including after the text is restyled.
+    LaunchedEffect(paged, chapter, s.fontSize, s.lineHeight, s.margin, s.font, weight, viewport) {
+        if (!paged) return@LaunchedEffect
+        withFrameNanos { }; withFrameNanos { }
+        alignTop(forward = false)
+    }
+
+    // Reading tracker: a marker stepped word by word (or sentence by sentence) by sliding along the side rail.
+    var track by remember(chapter) { mutableStateOf<Track?>(null) }
+    val unitCache = remember(chapter, s.trackerUnit) { HashMap<Int, List<IntRange>>() }
+    fun units(b: Int) = unitCache.getOrPut(b) { ch.blocks[b].takeIf { it.type == 0 }?.let { trackerUnits(it.text, s.trackerUnit == 1) }.orEmpty() }
+    /** Root-y span of the first line of tracker unit [t], or null if its paragraph isn't laid out on screen. */
+    fun trackLine(t: Track): Pair<Float, Float>? {
+        val r = units(t.block).getOrNull(t.unit) ?: return null
+        val it = listState.layoutInfo.visibleItemsInfo.firstOrNull { it.index == t.block } ?: return null
+        val l = paras[t.block]?.layout ?: return null
+        val line = l.getLineForOffset(r.first.coerceIn(0, (l.layoutInput.text.length - 1).coerceAtLeast(0)))
+        return itemTop(it) + l.getLineTop(line) to itemTop(it) + l.getLineBottom(line)
+    }
+    /** Whether stepping should continue from [t], rather than restart at the top of what's on screen. Lenient
+     *  so that quick steps made while the page is still turning or scrolling don't lose their place. */
+    fun onPage(t: Track): Boolean {
+        val (lt, lb) = trackLine(t) ?: return false
+        return if (paged) turning[0] || (lt >= contentTop() - 0.5f && lt < contentBottom() + lineH())
+        else lb > contentTop() - lineH() && lt < viewport.height
+    }
+    fun firstUnitOnPage(): Track? {
+        for (it in listState.layoutInfo.visibleItemsInfo) {
+            val l = paras[it.index]?.layout ?: continue
+            val us = units(it.index)
+            val idx = us.indexOfFirst { u -> itemTop(it) + l.getLineTop(l.getLineForOffset(u.first)) >= contentTop() - 0.5f }
+            if (idx >= 0) return Track(it.index, idx)
+        }
+        return null
+    }
+    fun stepTrack(forward: Boolean): Boolean {
+        val t = track?.takeIf { onPage(it) } ?: return firstUnitOnPage()?.also { track = it } != null
+        val next = if (forward) {
+            if (t.unit + 1 < units(t.block).size) t.copy(unit = t.unit + 1)
+            else (t.block + 1 until ch.blocks.size).firstOrNull { units(it).isNotEmpty() }?.let { Track(it, 0) }
+        } else {
+            if (t.unit > 0) t.copy(unit = t.unit - 1)
+            else (t.block - 1 downTo 0).firstOrNull { units(it).isNotEmpty() }?.let { Track(it, units(it).lastIndex) }
+        } ?: return false
+        track = next
+        return true
+    }
+    // Keep the tracked text in view: turn the page, or scroll it back to the upper third of the screen.
+    LaunchedEffect(track) {
+        val t = track ?: return@LaunchedEffect
+        val span = trackLine(t)
+        if (span == null) {
+            if (paged) { listState.scrollToItem(t.block); withFrameNanos { }; alignTop(forward = false) }
+            else listState.animateScrollToItem(t.block, -(pageH() * 0.3f).toInt())
+            return@LaunchedEffect
+        }
+        val (lt, lb) = span
+        if (paged) {
+            if (lt >= pageCut() - 0.5f) turnPage(true) else if (lt < contentTop() - 0.5f) turnPage(false)
+        } else if (lt < contentTop() || lb > contentBottom() - lineH()) {
+            listState.animateScrollBy(lt - (contentTop() + pageH() * 0.3f))
+        }
+    }
+
+    fun onPageTap(x: Float) {
+        when {
+            sel != null || activeHl != null -> { sel = null; activeHl = null }
+            paged && !chrome && x < viewport.width * 0.3f -> turnPage(false)
+            paged && !chrome && x > viewport.width * 0.7f -> turnPage(true)
+            else -> chrome = !chrome
+        }
+    }
 
     fun root() = rootCoords[0]?.takeIf { it.isAttached }
 
@@ -442,7 +639,7 @@ private fun ReaderContent(
 
     // Auto-scroll while a selection drag sits near the top or bottom edge, extending as text moves under it.
     LaunchedEffect(selecting) {
-        if (!selecting) return@LaunchedEffect
+        if (!selecting || paged) return@LaunchedEffect
         val edge = with(density) { 96.dp.toPx() }
         val maxStep = with(density) { 14.dp.toPx() }
         val topEdge = with(density) { (top + 56.dp).toPx() } + edge
@@ -463,20 +660,29 @@ private fun ReaderContent(
 
     Box(
         Modifier.fillMaxSize().background(page)
-            .onGloballyPositioned { rootCoords[0] = it }
+            .onGloballyPositioned { rootCoords[0] = it; viewport = it.size }
     ) {
         Box(
             Modifier.fillMaxSize()
                 // Keep a display list of the page so the loupe can redraw it magnified.
                 .drawWithContent { pageLayer.record { this@drawWithContent.drawContent() }; drawLayer(pageLayer) }
                 .pointerInput(Unit) { pinchToResize { changeFont(it) } }
+                .graphicsLayer { val v = turnAnim.value; alpha = 1f - kotlin.math.abs(v); translationX = -v * 28.dp.toPx() }
         ) {
             LazyColumn(
                 state = listState,
-                modifier = Modifier.fillMaxSize().pointerInput(Unit) {
-                    detectTapGestures(onTap = { if (sel != null || activeHl != null) { sel = null; activeHl = null } else chrome = !chrome })
-                },
-                contentPadding = PaddingValues(start = s.margin.dp, end = s.margin.dp, top = top + 56.dp, bottom = bottom + 96.dp),
+                userScrollEnabled = !paged,
+                modifier = Modifier.fillMaxSize()
+                    .pointerInput(paged) { detectTapGestures(onTap = { onPageTap(it.x) }) }
+                    .pointerInput(paged) {
+                        if (!paged) return@pointerInput
+                        var dx = 0f
+                        detectHorizontalDragGestures(
+                            onDragStart = { dx = 0f },
+                            onDragEnd = { if (kotlin.math.abs(dx) > 48.dp.toPx()) turnPage(dx < 0) },
+                        ) { c, d -> dx += d; c.consume() }
+                    },
+                contentPadding = PaddingValues(start = s.margin.dp, end = s.margin.dp, top = topPad, bottom = bottomPad),
             ) {
                 itemsIndexed(ch.blocks, key = { i, _ -> "$chapter-$i" }) { i, b ->
                     when (b.type) {
@@ -512,13 +718,11 @@ private fun ReaderContent(
                                 reactions = hls.mapNotNull { h -> h.reaction?.takeIf { h.lastBlock == i }?.let { h.rangeIn(i, b.text.length).last to it } },
                                 selection = sel?.rangeIn(i, b.text.length),
                                 searchTerm = searchTerm,
-                                onTap = { off ->
+                                tracked = track?.takeIf { s.tracker && it.block == i }?.let { units(i).getOrNull(it.unit) },
+                                trackColor = g.accent,
+                                onTap = { off, w ->
                                     val hit = hls.firstOrNull { off in it.rangeIn(i, b.text.length) }
-                                    when {
-                                        hit != null -> { activeHl = hit; sel = null }
-                                        sel != null || activeHl != null -> { sel = null; activeHl = null }
-                                        else -> chrome = !chrome
-                                    }
+                                    if (hit != null) { activeHl = hit; sel = null } else onPageTap(root()?.windowToLocal(w)?.x ?: 0f)
                                 },
                                 onLong = { w ->
                                     val p = root()?.windowToLocal(w)
@@ -550,8 +754,23 @@ private fun ReaderContent(
 
         // Quiet chrome: running header and reading time, like Apple Books with controls hidden.
         // Fade the page under the status bar and the running header/footer so text never collides with them.
-        Box(Modifier.fillMaxWidth().height(top + 64.dp).background(Brush.verticalGradient(0f to page, 0.72f to page, 1f to page.copy(alpha = 0f))))
-        Box(Modifier.align(Alignment.BottomCenter).fillMaxWidth().height(bottom + 76.dp).background(Brush.verticalGradient(0f to page.copy(alpha = 0f), 0.45f to page, 1f to page)))
+        if (paged) {
+            // One page at a time: hide whatever lies above the page and from the first line that doesn't fit.
+            Box(Modifier.fillMaxSize().drawBehind {
+                drawRect(page, size = Size(size.width, contentTop()))
+                val cut = pageCut()
+                if (cut > contentTop() + 1f) drawRect(page, Offset(0f, cut), Size(size.width, size.height - cut))
+            })
+        } else {
+            Box(Modifier.fillMaxWidth().height(top + 64.dp).background(Brush.verticalGradient(0f to page, 0.72f to page, 1f to page.copy(alpha = 0f))))
+            Box(Modifier.align(Alignment.BottomCenter).fillMaxWidth().height(bottom + 92.dp).background(Brush.verticalGradient(0f to page.copy(alpha = 0f), 0.4f to page, 1f to page)))
+        }
+        if (s.tracker) TrackerRail(
+            stepPx = with(density) { (if (s.trackerUnit == 1) 44.dp else 18.dp).toPx() },
+            ink = ink, accent = g.accent,
+            onStep = { fwd -> if (stepTrack(fwd)) haptics.tick() },
+            modifier = Modifier.align(Alignment.TopEnd).padding(top = topPad, bottom = bottomPad).fillMaxHeight().width(32.dp),
+        )
         if (sel != null) for (isStart in listOf(true, false)) {
             SelectionHandle(
                 isStart = isStart,
@@ -566,6 +785,8 @@ private fun ReaderContent(
                 onEnd = { endDrag() },
             )
         }
+        val pm = pageMap
+        val pg = pageInChapter
         AnimatedVisibility(!chrome, enter = fadeIn(), exit = fadeOut()) {
             Box(Modifier.fillMaxSize()) {
                 Text(
@@ -573,11 +794,24 @@ private fun ReaderContent(
                     overflow = TextOverflow.Ellipsis,
                     modifier = Modifier.align(Alignment.TopCenter).statusBarsPadding().padding(top = 14.dp, start = 64.dp, end = 64.dp),
                 )
-                Text(
-                    if (minutesLeft <= 1) "${(bookProgress * 100).toInt()}%" else "$minutesLeft min left in chapter · ${(bookProgress * 100).toInt()}%",
-                    color = ink.copy(alpha = 0.45f), fontSize = 13.sp,
-                    modifier = Modifier.align(Alignment.BottomCenter).navigationBarsPadding().padding(bottom = 14.dp),
-                )
+                // Page number, pages left and a thin progress line through the whole book.
+                Column(Modifier.align(Alignment.BottomCenter).fillMaxWidth().navigationBarsPadding().padding(horizontal = 24.dp).padding(bottom = 12.dp)) {
+                    val faint = ink.copy(alpha = 0.45f)
+                    Row(Modifier.fillMaxWidth().padding(bottom = 7.dp)) {
+                        if (pm != null && pg != null) {
+                            Text("Page ${pm.startOf(chapter) + pg + 1} of ${pm.total}", color = faint, fontSize = 13.sp, modifier = Modifier.weight(1f))
+                            val left = pm.pagesIn(chapter) - 1 - pg
+                            Text(
+                                when (left) { 0 -> "Last page in chapter"; 1 -> "1 page left in chapter"; else -> "$left pages left in chapter" },
+                                color = faint, fontSize = 13.sp,
+                            )
+                        } else {
+                            Text(if (minutesLeft <= 1) "${(bookProgress * 100).toInt()}%" else "$minutesLeft min left in chapter · ${(bookProgress * 100).toInt()}%", color = faint, fontSize = 13.sp)
+                        }
+                    }
+                    val frac = if (pm != null && pg != null && pm.total > 0) (pm.startOf(chapter) + pg + 1f) / pm.total else bookProgress
+                    ProgressLine(frac, ink)
+                }
             }
         }
         AnimatedVisibility(chrome && sel == null && activeHl == null, enter = fadeIn() + slideInVertically { -it / 3 }, exit = fadeOut()) {
@@ -599,7 +833,8 @@ private fun ReaderContent(
         ) {
             Column(Modifier.fillMaxWidth().navigationBarsPadding().padding(horizontal = 12.dp, vertical = 10.dp), horizontalAlignment = Alignment.CenterHorizontally) {
                 Text(
-                    "Chapter ${chapter + 1} of ${chapters.size} · ${(bookProgress * 100).toInt()}%",
+                    if (pm != null && pg != null) "Page ${pm.startOf(chapter) + pg + 1} of ${pm.total} · ${(bookProgress * 100).toInt()}%"
+                    else "Chapter ${chapter + 1} of ${chapters.size} · ${(bookProgress * 100).toInt()}%",
                     color = g.text, fontSize = 14.sp,
                     modifier = Modifier.padding(bottom = 10.dp).panel(CircleShape).padding(horizontal = 16.dp, vertical = 8.dp),
                 )
@@ -673,6 +908,7 @@ private fun ReaderContent(
                 onDelete = { existing?.let { vm.deleteHighlight(it.id) }; activeHl = null },
             )
         }
+        GoalBanner(vm, Modifier.align(Alignment.TopCenter))
         if (loupe.isSpecified) Loupe(pageLayer, loupe, page)
         if (sizeHud > 0) {
             LaunchedEffect(sizeHud) { delay(900); sizeHud = 0 }
@@ -861,7 +1097,11 @@ private fun Paragraph(
     reactions: List<Pair<Int, String>>,
     selection: IntRange?,
     searchTerm: String?,
-    onTap: (Int) -> Unit,
+    /** Reading-tracker unit to mark in this paragraph. */
+    tracked: IntRange?,
+    trackColor: Color,
+    /** Character offset and window position of a tap. */
+    onTap: (Int, Offset) -> Unit,
     onLong: (Offset) -> Unit,
     onDrag: (Offset) -> Unit,
     onEnd: () -> Unit,
@@ -872,7 +1112,7 @@ private fun Paragraph(
     val drag by rememberUpdatedState(onDrag)
     val end by rememberUpdatedState(onEnd)
     val measurer = rememberTextMeasurer()
-    val annotated = remember(text, highlights, selection, searchTerm) {
+    val annotated = remember(text, highlights, selection, searchTerm, tracked) {
         buildAnnotatedString {
             append(text)
             highlights.forEach { (r, color, hlStyle) ->
@@ -885,6 +1125,7 @@ private fun Paragraph(
                     idx = text.indexOf(searchTerm, idx + searchTerm.length, ignoreCase = true)
                 }
             }
+            tracked?.let { addStyle(SpanStyle(background = trackColor.copy(alpha = 0.2f)), it.first, it.last + 1) }
             selection?.let { addStyle(SpanStyle(background = SelectionColor.copy(alpha = 0.7f)), it.first, it.last + 1) }
         }
     }
@@ -896,6 +1137,7 @@ private fun Paragraph(
                 highlights.forEach { (r, color, hlStyle) ->
                     if (hlStyle == 1 && !r.isEmpty()) underline(l, r, HighlightColors[color % HighlightColors.size], 2.4.dp.toPx(), 3.5.dp.toPx())
                 }
+                tracked?.let { if (!it.isEmpty()) underline(l, it, trackColor, 2.dp.toPx(), 3.dp.toPx()) }
             }
             .drawWithContent {
                 drawContent()
@@ -918,7 +1160,11 @@ private fun Paragraph(
                 val finished = withTimeoutOrNull(viewConfiguration.longPressTimeoutMillis) { up = waitForUpOrCancellation(); true }
                 if (finished == true) {
                     val u = up
-                    if (u != null) { u.consume(); ref.layout?.let { tap(it.getOffsetForPosition(u.position)) } }
+                    if (u != null) {
+                        u.consume()
+                        val l = ref.layout; val c = ref.coords?.takeIf { it.isAttached }
+                        if (l != null && c != null) tap(l.getOffsetForPosition(u.position), c.localToWindow(u.position))
+                    }
                     return@awaitEachGesture
                 }
                 val c0 = ref.coords?.takeIf { it.isAttached } ?: return@awaitEachGesture
@@ -933,6 +1179,53 @@ private fun Paragraph(
                 } finally { end() }
             }
         },
+    )
+}
+
+/** Thin progress line: how far through the book the reader is. */
+@Composable
+private fun ProgressLine(fraction: Float, ink: Color) {
+    Box(Modifier.fillMaxWidth().height(3.dp).clip(CircleShape).background(ink.copy(alpha = 0.12f))) {
+        Box(Modifier.fillMaxWidth(fraction.coerceIn(0.005f, 1f)).fillMaxHeight().clip(CircleShape).background(ink.copy(alpha = 0.5f)))
+    }
+}
+
+/**
+ * Side rail for the reading tracker: sliding a finger down it steps the marker forward one word or sentence
+ * every [stepPx], sliding up steps back, and a tap steps forward once.
+ */
+@Composable
+private fun TrackerRail(stepPx: Float, ink: Color, accent: Color, onStep: (Boolean) -> Unit, modifier: Modifier) {
+    var knob by remember { mutableStateOf<Float?>(null) }
+    val step by rememberUpdatedState(onStep)
+    Box(
+        modifier
+            .pointerInput(stepPx) {
+                awaitEachGesture {
+                    val down = awaitFirstDown()
+                    down.consume()
+                    knob = down.position.y
+                    var acc = 0f
+                    var moved = false
+                    try {
+                        while (true) {
+                            val c = awaitPointerEvent().changes.firstOrNull { it.id == down.id } ?: break
+                            if (!c.pressed) { c.consume(); break }
+                            acc += c.position.y - c.previousPosition.y
+                            knob = c.position.y.coerceIn(0f, size.height.toFloat())
+                            while (acc >= stepPx) { acc -= stepPx; step(true); moved = true }
+                            while (acc <= -stepPx) { acc += stepPx; step(false); moved = true }
+                            c.consume()
+                        }
+                        if (!moved) step(true)
+                    } finally { knob = null }
+                }
+            }
+            .drawBehind {
+                val x = size.width - 7.dp.toPx()
+                drawLine(ink.copy(alpha = 0.13f), Offset(x, 0f), Offset(x, size.height), 3.dp.toPx(), StrokeCap.Round)
+                knob?.let { y -> drawLine(accent, Offset(x, y - 20.dp.toPx()), Offset(x, y + 20.dp.toPx()), 6.dp.toPx(), StrokeCap.Round) }
+            },
     )
 }
 
@@ -1236,8 +1529,9 @@ fun ReaderSettingsSheet(vm: AppViewModel, s: ReaderSettings, dark: Boolean, onDi
                 brightness = v
                 activity?.window?.let { w -> w.attributes = w.attributes.apply { screenBrightness = v } }
             }
-            SettingSlider(Icons.Rounded.FormatLineSpacing, s.lineHeight, 1.2f..2.2f) { v -> vm.updateSettings { it.copy(lineHeight = v) } }
-            SettingSlider(Icons.Rounded.FormatIndentIncrease, s.margin.toFloat(), 8f..56f) { v -> vm.updateSettings { it.copy(margin = v.toInt()) } }
+            SettingSlider(Icons.Rounded.FormatLineSpacing, s.lineHeight, 1.2f..2.2f, label = "Line spacing", valueText = "%.1f×".format(s.lineHeight)) { v -> vm.updateSettings { it.copy(lineHeight = v) } }
+            MarginControl(s.margin) { m -> vm.updateSettings { it.copy(margin = m) } }
+            PageModeControl(s.pageMode) { m -> vm.updateSettings { it.copy(pageMode = m) } }
             LazyVerticalGrid(
                 GridCells.Fixed(3), Modifier.padding(top = 8.dp).height(232.dp),
                 horizontalArrangement = Arrangement.spacedBy(10.dp), verticalArrangement = Arrangement.spacedBy(10.dp),
@@ -1261,6 +1555,8 @@ fun ReaderSettingsSheet(vm: AppViewModel, s: ReaderSettings, dark: Boolean, onDi
                 OptionRow("Bold Text", null, s.bold) { on -> vm.updateSettings { it.copy(bold = on) } }
                 HorizontalDivider(Modifier.padding(start = 20.dp), color = g.separator)
                 OptionRow("Justify Text", null, s.justify) { on -> vm.updateSettings { it.copy(justify = on) } }
+                HorizontalDivider(Modifier.padding(start = 20.dp), color = g.separator)
+                TrackerOptions(s, vm)
             }
             Text(
                 "Tip: pinch the page with two fingers to change text size.",
@@ -1304,11 +1600,90 @@ fun FontPicker(selected: String, onPick: (String) -> Unit) {
 }
 
 @Composable
-private fun SettingSlider(icon: androidx.compose.ui.graphics.vector.ImageVector, value: Float, range: ClosedFloatingPointRange<Float>, onChange: (Float) -> Unit) {
+private fun SettingSlider(
+    icon: androidx.compose.ui.graphics.vector.ImageVector,
+    value: Float,
+    range: ClosedFloatingPointRange<Float>,
+    label: String? = null,
+    valueText: String? = null,
+    onChange: (Float) -> Unit,
+) {
     val g = LocalG.current
-    Row(Modifier.fillMaxWidth().padding(top = 10.dp), verticalAlignment = Alignment.CenterVertically) {
-        Icon(icon, null, tint = g.text2, modifier = Modifier.size(22.dp))
-        GSlider(value, range, onChange, Modifier.weight(1f).padding(start = 12.dp))
+    Column(Modifier.fillMaxWidth().padding(top = 10.dp)) {
+        if (label != null) Row(Modifier.fillMaxWidth().padding(start = 34.dp), verticalAlignment = Alignment.CenterVertically) {
+            Text(label, fontSize = 14.sp, color = g.text2, modifier = Modifier.weight(1f))
+            if (valueText != null) Text(valueText, fontSize = 14.sp, color = g.text2)
+        }
+        Row(Modifier.fillMaxWidth(), verticalAlignment = Alignment.CenterVertically) {
+            Icon(icon, null, tint = g.text2, modifier = Modifier.size(22.dp))
+            GSlider(value, range, onChange, Modifier.weight(1f).padding(start = 12.dp))
+        }
+    }
+}
+
+const val MIN_MARGIN = 0
+const val MAX_MARGIN = 80
+
+/** Page margins: a slider plus quick presets. */
+@Composable
+fun MarginControl(margin: Int, onChange: (Int) -> Unit) {
+    val g = LocalG.current
+    Column(Modifier.fillMaxWidth().padding(top = 10.dp)) {
+        Row(Modifier.fillMaxWidth().padding(start = 34.dp), verticalAlignment = Alignment.CenterVertically) {
+            Text("Margins", fontSize = 14.sp, color = g.text2, modifier = Modifier.weight(1f))
+            Text("$margin", fontSize = 14.sp, color = g.text2)
+        }
+        Row(Modifier.fillMaxWidth(), verticalAlignment = Alignment.CenterVertically) {
+            Icon(Icons.Rounded.FormatIndentIncrease, null, tint = g.text2, modifier = Modifier.size(22.dp))
+            GSlider(margin.toFloat(), MIN_MARGIN.toFloat()..MAX_MARGIN.toFloat(), { onChange(it.roundToInt()) }, Modifier.weight(1f).padding(start = 12.dp))
+        }
+        Row(Modifier.fillMaxWidth().padding(start = 34.dp, top = 2.dp), horizontalArrangement = Arrangement.spacedBy(8.dp)) {
+            listOf("Narrow" to 8, "Normal" to 24, "Wide" to 44, "Extra wide" to 64).forEach { (name, v) ->
+                val on = margin == v
+                Text(
+                    name, fontSize = 13.sp, fontWeight = if (on) FontWeight.SemiBold else FontWeight.Medium, color = if (on) g.accent else g.text,
+                    modifier = Modifier.clip(CircleShape).background(if (on) g.accent.copy(alpha = 0.16f) else g.fill)
+                        .clickable { onChange(v) }.padding(horizontal = 12.dp, vertical = 6.dp),
+                )
+            }
+        }
+    }
+}
+
+/** Scroll through the whole chapter, or turn one page at a time. */
+@Composable
+fun PageModeControl(mode: Int, onChange: (Int) -> Unit) {
+    val g = LocalG.current
+    Row(Modifier.fillMaxWidth().padding(top = 14.dp), horizontalArrangement = Arrangement.spacedBy(10.dp)) {
+        listOf(
+            Triple("Scroll", "Whole chapter", Icons.Rounded.SwipeVertical),
+            Triple("Pages", "Tap or swipe to turn", Icons.Rounded.AutoStories),
+        ).forEachIndexed { i, (title, sub, icon) ->
+            val on = mode == i
+            Row(
+                Modifier.weight(1f).clip(RoundedCornerShape(20.dp)).background(if (on) g.accent.copy(alpha = 0.14f) else g.surface)
+                    .border(if (on) 1.5.dp else 0.7.dp, if (on) g.accent else g.separator, RoundedCornerShape(20.dp))
+                    .clickable { onChange(i) }.padding(horizontal = 14.dp, vertical = 12.dp),
+                verticalAlignment = Alignment.CenterVertically,
+            ) {
+                Icon(icon, null, tint = if (on) g.accent else g.text2, modifier = Modifier.size(22.dp))
+                Column(Modifier.padding(start = 10.dp)) {
+                    Text(title, fontSize = 16.sp, fontWeight = FontWeight.SemiBold, color = g.text)
+                    Text(sub, fontSize = 12.sp, color = g.text2, maxLines = 1)
+                }
+            }
+        }
+    }
+}
+
+/** Reading tracker switch and its word / sentence step. */
+@Composable
+fun TrackerOptions(s: ReaderSettings, vm: AppViewModel) {
+    val g = LocalG.current
+    OptionRow("Reading tracker", "Slide along the right edge to move a marker through the text", s.tracker) { on -> vm.updateSettings { it.copy(tracker = on) } }
+    if (s.tracker) Row(Modifier.fillMaxWidth().padding(horizontal = 20.dp, vertical = 10.dp), verticalAlignment = Alignment.CenterVertically) {
+        Text("Track by", fontSize = 17.sp, color = g.text, modifier = Modifier.weight(1f))
+        Segmented(listOf("Word", "Sentence"), s.trackerUnit, { i -> vm.updateSettings { it.copy(trackerUnit = i) } })
     }
 }
 

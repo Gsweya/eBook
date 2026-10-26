@@ -86,6 +86,7 @@ import com.gbook.ui.components.IconCircle
 import com.gbook.ui.components.PillButton
 import com.gbook.ui.components.panel
 import com.gbook.ui.components.TrackReadingTime
+import com.gbook.ui.components.GoalBanner
 import com.gbook.ui.theme.LocalG
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.FlowPreview
@@ -265,6 +266,7 @@ private fun PdfPages(vm: AppViewModel, id: String, onBack: () -> Unit, reflowLab
                 IconCircle(Icons.Rounded.FormatListBulleted, "Contents", { showContents = true }, size = 52.dp)
             }
         }
+        GoalBanner(vm, Modifier.align(Alignment.TopCenter))
     }
     if (showContents) {
         val chapters = content?.chapters.orEmpty()

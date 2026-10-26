@@ -1,8 +1,25 @@
 package com.gbook.ui.screens
 
 import android.text.format.DateUtils
+import android.Manifest
+import android.content.Intent
+import android.content.pm.PackageManager
+import android.os.Build
+import android.provider.Settings
+import androidx.compose.foundation.horizontalScroll
+import androidx.compose.material.icons.rounded.Add
+import androidx.compose.material.icons.rounded.NotificationsActive
+import androidx.compose.material.icons.rounded.NotificationsOff
+import androidx.compose.material3.TextButton
+import androidx.compose.runtime.mutableStateOf
+import androidx.compose.runtime.setValue
+import androidx.core.app.NotificationManagerCompat
+import androidx.core.content.ContextCompat
+import androidx.lifecycle.Lifecycle
+import androidx.lifecycle.compose.LifecycleEventEffect
+import com.gbook.data.Reminder
+import com.gbook.ui.theme.DisplaySerif
 import androidx.activity.compose.BackHandler
-import androidx.activity.result.PickVisualMediaRequest
 import androidx.compose.animation.AnimatedContent
 import androidx.compose.animation.fadeIn
 import androidx.compose.animation.fadeOut
@@ -88,6 +105,7 @@ import androidx.compose.ui.unit.sp
 import com.gbook.AppViewModel
 import com.gbook.data.ReaderSettings
 import com.gbook.ui.components.GSheet
+import com.gbook.ui.components.GSwitch
 import com.gbook.ui.theme.AccentPalettes
 import com.gbook.ui.theme.GType
 import com.gbook.ui.theme.HighlightColors
@@ -102,7 +120,8 @@ private class SettingsPage(val id: String, val title: String, val subtitle: Stri
 private val Pages = listOf(
     SettingsPage("appearance", "Appearance", "Mode, accent colour, pure black", Icons.Rounded.Palette),
     SettingsPage("navigation", "Navigation bar", "Bar style and icon style", Icons.Rounded.SpaceDashboard),
-    SettingsPage("reading", "Reading", "Font, text size, highlights", Icons.AutoMirrored.Rounded.MenuBook),
+    SettingsPage("reading", "Reading", "Font, size, margins, page turning, tracker", Icons.AutoMirrored.Rounded.MenuBook),
+    SettingsPage("goals", "Goals & reminders", "Daily goal and reading timetable", Icons.Rounded.NotificationsActive),
     SettingsPage("backup", "Google Drive & backup", "Back up, restore, import books", Icons.Rounded.Cloud),
     SettingsPage("about", "About", "Version and credits", Icons.Rounded.Info),
 )
@@ -134,6 +153,7 @@ fun SettingsTab(vm: AppViewModel, page: String?, onPage: (String?) -> Unit, onSc
                     "appearance" -> AppearancePage(vm)
                     "navigation" -> NavigationPage(vm)
                     "reading" -> ReadingPage(vm)
+                    "goals" -> GoalsPage(vm)
                     "backup" -> BackupPage(vm)
                     else -> AboutPage(vm)
                 }
@@ -216,8 +236,7 @@ private fun ProfilePage(vm: AppViewModel) {
     val g = LocalG.current
     val data by vm.data.collectAsState()
     val s = data.settings
-    val pick = rememberLauncherForActivityResult(ActivityResultContracts.PickVisualMedia()) { uri -> uri?.let(vm::setAvatar) }
-    val choose = { pick.launch(PickVisualMediaRequest(ActivityResultContracts.PickVisualMedia.ImageOnly)) }
+    val choose = com.gbook.ui.components.rememberAvatarPicker { vm.saveAvatar(it) }
     Column(Modifier.fillMaxWidth().padding(top = 8.dp), horizontalAlignment = Alignment.CenterHorizontally) {
         Box(contentAlignment = Alignment.BottomEnd) {
             Avatar(vm.avatarFile, s.avatarVersion, s.profileName, 120.dp, Modifier.clip(CircleShape).clickable(onClick = choose))
@@ -341,6 +360,16 @@ private fun ReadingPage(vm: AppViewModel) {
             }, highlightSelected = false)
         }
     }
+    SectionLabel("Page")
+    Column(Modifier.padding(horizontal = 16.dp)) {
+        PageModeControl(s.pageMode) { m -> vm.updateSettings { it.copy(pageMode = m) } }
+    }
+    SettingsCard {
+        Box(Modifier.padding(start = 6.dp, end = 20.dp, bottom = 12.dp)) {
+            MarginControl(s.margin) { m -> vm.updateSettings { it.copy(margin = m) } }
+        }
+    }
+    SettingsCard { TrackerOptions(s, vm) }
     SectionLabel("Highlights")
     SettingsCard {
         Row(Modifier.fillMaxWidth().padding(horizontal = 20.dp, vertical = 12.dp), verticalAlignment = Alignment.CenterVertically) {
@@ -358,12 +387,83 @@ private fun ReadingPage(vm: AppViewModel) {
 }
 
 @Composable
+private fun GoalsPage(vm: AppViewModel) {
+    val g = LocalG.current
+    val ctx = LocalContext.current
+    val data by vm.data.collectAsState()
+    val askPermission = rememberNotificationPermission()
+    var editing by remember { mutableStateOf<Reminder?>(null) }
+    var adding by remember { mutableStateOf(false) }
+    // Re-checked on resume so it updates after the permission prompt or system settings.
+    var notificationsOn by remember { mutableStateOf(NotificationManagerCompat.from(ctx).areNotificationsEnabled()) }
+    LifecycleEventEffect(Lifecycle.Event.ON_RESUME) { notificationsOn = NotificationManagerCompat.from(ctx).areNotificationsEnabled() }
+    val goal = data.settings.dailyGoalMin
+
+    SectionLabel("Daily goal")
+    SettingsCard {
+        Column(Modifier.padding(20.dp)) {
+            Text(if (goal == 0) "No daily goal" else "$goal min a day", fontFamily = DisplaySerif, fontWeight = FontWeight.Bold, fontSize = 26.sp, color = g.text)
+            Text(
+                "When you reach it you'll get a small celebration — and you can keep reading as long as you like.",
+                fontSize = 14.sp, color = g.text2, modifier = Modifier.padding(top = 4.dp, bottom = 14.dp),
+            )
+            Row(Modifier.horizontalScroll(rememberScrollState()), horizontalArrangement = Arrangement.spacedBy(8.dp)) {
+                listOf(0, 10, 15, 20, 30, 45, 60, 90).forEach { m ->
+                    SelectChip(if (m == 0) "Off" else "$m min", goal == m) { vm.setDailyGoal(m) }
+                }
+            }
+        }
+    }
+    if (!notificationsOn) {
+        SettingsCard {
+            Row(Modifier.fillMaxWidth().padding(16.dp), verticalAlignment = Alignment.CenterVertically) {
+                Icon(Icons.Rounded.NotificationsOff, null, tint = g.destructive)
+                Spacer(Modifier.width(12.dp))
+                Text("Notifications are off, so reminders can't appear.", fontSize = 15.sp, color = g.text, modifier = Modifier.weight(1f))
+                TextButton({
+                    if (Build.VERSION.SDK_INT >= 33 && ContextCompat.checkSelfPermission(ctx, Manifest.permission.POST_NOTIFICATIONS) != PackageManager.PERMISSION_GRANTED) askPermission()
+                    else ctx.startActivity(Intent(Settings.ACTION_APP_NOTIFICATION_SETTINGS).putExtra(Settings.EXTRA_APP_PACKAGE, ctx.packageName))
+                }) { Text("Turn on", color = g.accent, fontWeight = FontWeight.SemiBold) }
+            }
+        }
+    }
+    SectionLabel("Reading timetable")
+    SettingsCard {
+        data.reminders.sortedBy { it.hour * 60 + it.minute }.forEachIndexed { i, r ->
+            if (i > 0) HorizontalDivider(Modifier.padding(start = 20.dp), color = g.separator)
+            val bookTitle = data.books.firstOrNull { it.id == r.bookId }?.title
+            Row(Modifier.fillMaxWidth().clickable { editing = r }.padding(horizontal = 20.dp, vertical = 12.dp), verticalAlignment = Alignment.CenterVertically) {
+                Column(Modifier.weight(1f)) {
+                    Text(timeLabel(r.hour, r.minute), fontSize = 24.sp, fontWeight = FontWeight.SemiBold, color = if (r.enabled) g.text else g.text2)
+                    Text(daysLabel(r.days) + (bookTitle?.let { " · Plan: $it" } ?: ""), fontSize = 14.sp, color = g.text2, maxLines = 1)
+                }
+                GSwitch(r.enabled) { on -> vm.saveReminder(r.copy(enabled = on)); if (on) askPermission() }
+            }
+        }
+        if (data.reminders.isNotEmpty()) HorizontalDivider(Modifier.padding(start = 20.dp), color = g.separator)
+        Row(Modifier.fillMaxWidth().clickable { adding = true }.padding(horizontal = 20.dp, vertical = 16.dp), verticalAlignment = Alignment.CenterVertically) {
+            Icon(Icons.Rounded.Add, null, tint = g.accent)
+            Spacer(Modifier.width(12.dp))
+            Text("Add reminder", fontSize = 17.sp, color = g.accent, fontWeight = FontWeight.SemiBold)
+        }
+    }
+    Text(
+        "Reminders arrive as notifications within about 10 minutes of the set time. Book plans can add their own reminder from the book's page.",
+        style = GType.caption, color = g.text2, modifier = Modifier.padding(horizontal = 36.dp, vertical = 6.dp),
+    )
+    if (adding) ReminderDialog(null, onDismiss = { adding = false }, onSave = { vm.saveReminder(it); askPermission(); adding = false })
+    editing?.let { r ->
+        ReminderDialog(r, onDismiss = { editing = null }, onSave = { vm.saveReminder(it); editing = null }, onDelete = { vm.deleteReminder(r.id); editing = null })
+    }
+}
+
+@Composable
 private fun BackupPage(vm: AppViewModel) {
     val g = LocalG.current
     val data by vm.data.collectAsState()
     val backup = rememberLauncherForActivityResult(ActivityResultContracts.CreateDocument("application/zip")) { it?.let(vm::backup) }
     val restore = rememberLauncherForActivityResult(ActivityResultContracts.OpenDocument()) { it?.let(vm::restore) }
-    val importMany = rememberLauncherForActivityResult(ActivityResultContracts.OpenMultipleDocuments()) { uris -> uris.forEach { vm.import(it) } }
+    val importMany = rememberLauncherForActivityResult(ActivityResultContracts.OpenMultipleDocuments()) { uris -> vm.importMany(uris) }
     Text(
         "When the file picker opens, choose Drive from the menu (☰) and pick a folder.",
         style = GType.secondary, color = g.text2, modifier = Modifier.padding(start = 20.dp, end = 20.dp, bottom = 8.dp),
@@ -402,7 +502,7 @@ private fun AboutPage(vm: AppViewModel) {
         )
     }
     Text(
-        "GBook is open source (MIT). Reading fonts: Literata, Charis SIL, Source Serif, Newsreader, Gelasio, Crimson Pro, EB Garamond, Inter and DM Sans — SIL Open Font License. 3D icons: Noto 3D Emoji — Apache License 2.0.",
+        "GBook is open source (MIT). Reading fonts: Literata, Charis SIL, Source Serif, Newsreader, Gelasio, Crimson Pro, EB Garamond, Libre Baskerville, Inter and DM Sans — SIL Open Font License. 3D icons: Noto 3D Emoji — Apache License 2.0.",
         style = GType.caption, color = g.text2,
         modifier = Modifier.fillMaxWidth().padding(horizontal = 36.dp, vertical = 10.dp),
     )

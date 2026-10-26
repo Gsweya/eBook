@@ -44,9 +44,12 @@ import com.gbook.data.Book
 import com.gbook.data.BookFormat
 import com.gbook.ui.components.panel
 import com.gbook.ui.screens.BookDetailScreen
+import com.gbook.ui.screens.WelcomeFlow
+import com.gbook.ui.screens.CollectionScreen
 import com.gbook.ui.screens.HomeScreen
 import com.gbook.ui.screens.PdfScreen
 import com.gbook.ui.screens.ReaderScreen
+import com.gbook.reminders.EXTRA_OPEN_BOOK
 import com.gbook.ui.theme.GBookTheme
 import com.gbook.ui.theme.LocalG
 import kotlinx.coroutines.delay
@@ -58,6 +61,7 @@ sealed interface Route {
     data class Detail(val id: String) : Route { override val key = "detail/$id" }
     data class Reader(val id: String, val chapter: Int? = null, val block: Int? = null) : Route { override val key = "reader/$id/$chapter/$block" }
     data class Pdf(val id: String) : Route { override val key = "pdf/$id" }
+    data class Collection(val id: String) : Route { override val key = "collection/$id" }
 }
 
 class Nav(val push: (Route) -> Unit, val pop: () -> Unit) {
@@ -67,6 +71,8 @@ class Nav(val push: (Route) -> Unit, val pop: () -> Unit) {
 class MainActivity : ComponentActivity() {
     private val vm: AppViewModel by viewModels()
     private val pendingOpen = MutableStateFlow<Uri?>(null)
+    /** Book id to open, e.g. from a reading reminder notification. */
+    private val pendingBook = MutableStateFlow<String?>(null)
 
     override fun onCreate(savedInstanceState: Bundle?) {
         enableEdgeToEdge()
@@ -74,7 +80,7 @@ class MainActivity : ComponentActivity() {
         if (savedInstanceState == null) handleIntent(intent)
         setContent {
             val s by vm.data.collectAsState()
-            GBookTheme(s.settings.accent, s.settings.appearance, s.settings.amoled) { App(vm, pendingOpen) }
+            GBookTheme(s.settings.accent, s.settings.appearance, s.settings.amoled) { App(vm, pendingOpen, pendingBook) }
         }
     }
 
@@ -85,21 +91,31 @@ class MainActivity : ComponentActivity() {
 
     private fun handleIntent(i: Intent?) {
         if (i?.action == Intent.ACTION_VIEW) i.data?.let { pendingOpen.value = it }
+        i?.getStringExtra(EXTRA_OPEN_BOOK)?.let { pendingBook.value = it }
     }
 }
 
 @Composable
-fun App(vm: AppViewModel, pendingOpen: MutableStateFlow<Uri?>) {
+fun App(vm: AppViewModel, pendingOpen: MutableStateFlow<Uri?>, pendingBook: MutableStateFlow<String?>) {
     val stack = remember { mutableStateListOf<Route>(Route.Home) }
     val nav = remember { Nav(push = { stack.add(it) }, pop = { if (stack.size > 1) stack.removeAt(stack.lastIndex) }) }
     val holder = rememberSaveableStateHolder()
     val pending by pendingOpen.collectAsState()
+    val bookToOpen by pendingBook.collectAsState()
     val g = LocalG.current
 
     LaunchedEffect(pending) {
         val uri = pending ?: return@LaunchedEffect
         pendingOpen.value = null
         vm.import(uri) { nav.open(it) }
+    }
+    LaunchedEffect(bookToOpen) {
+        val id = bookToOpen ?: return@LaunchedEffect
+        pendingBook.value = null
+        vm.store.book(id)?.let { b ->
+            while (stack.size > 1) stack.removeAt(stack.lastIndex)
+            vm.markOpened(b.id); nav.open(b)
+        }
     }
     BackHandler(stack.size > 1) { nav.pop() }
 
@@ -115,9 +131,13 @@ fun App(vm: AppViewModel, pendingOpen: MutableStateFlow<Uri?>) {
                     is Route.Detail -> BookDetailScreen(vm, route.id, nav)
                     is Route.Reader -> ReaderScreen(vm, route.id, route.chapter, route.block, onBack = nav.pop)
                     is Route.Pdf -> PdfScreen(vm, route.id, onBack = nav.pop)
+                    is Route.Collection -> CollectionScreen(vm, route.id, nav)
                 }
             }
         }
+        // First run: splash, profile and first books, fading away into the library when done.
+        val onboarded = vm.data.collectAsState().value.onboarded
+        AnimatedVisibility(!onboarded, enter = fadeIn(tween(0)), exit = fadeOut(tween(450))) { WelcomeFlow(vm) }
         ToastHost(vm)
     }
 }

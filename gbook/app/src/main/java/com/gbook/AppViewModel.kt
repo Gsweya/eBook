@@ -6,6 +6,7 @@ import androidx.lifecycle.AndroidViewModel
 import androidx.lifecycle.viewModelScope
 import com.gbook.data.Backup
 import com.gbook.data.Book
+import com.gbook.data.BookCollection
 import com.gbook.data.BookFormat
 import com.gbook.data.Highlight
 import com.gbook.data.Importer
@@ -13,6 +14,9 @@ import com.gbook.data.LibraryData
 import com.gbook.data.Post
 import com.gbook.data.PostGenerator
 import com.gbook.data.ReaderSettings
+import com.gbook.data.ReadingPlan
+import com.gbook.data.Reminder
+import com.gbook.reminders.ReminderScheduler
 import com.gbook.data.ReadingPosition
 import com.gbook.data.Store
 import kotlinx.coroutines.Dispatchers
@@ -43,7 +47,12 @@ class AppViewModel(app: Application) : AndroidViewModel(app) {
             // Resume PDF text extraction that was interrupted by the process dying.
             store.data.value.books.filter { it.format == BookFormat.PDF && !it.textReady }.forEach { importer.extractPdf(it) }
         }
+        ReminderScheduler.ensureChannel(app)
+        ReminderScheduler.sync(app, store.data.value.reminders)
     }
+
+    /** Minutes read today at the moment the daily goal was reached; the reader shows a banner, then clears it. */
+    val goalReached = MutableStateFlow<Long?>(null)
 
     fun toast(msg: String) { toast.value = msg }
 
@@ -51,8 +60,13 @@ class AppViewModel(app: Application) : AndroidViewModel(app) {
     fun addReadingTime(bookId: String, ms: Long) {
         if (ms <= 0) return
         val day = LocalDate.now().toString()
+        val before = store.data.value.readingLog[day] ?: 0L
+        val goalMs = store.data.value.settings.dailyGoalMin * 60_000L
+        val reached = goalMs > 0 && before < goalMs && before + ms >= goalMs && store.data.value.goalReachedDay != day
+        if (reached) goalReached.value = (before + ms) / 60_000
         store.update { d ->
             d.copy(
+                goalReachedDay = if (reached) day else d.goalReachedDay,
                 books = d.books.map { if (it.id == bookId) it.copy(readingMs = it.readingMs + ms) else it },
                 readingLog = d.readingLog + (day to (d.readingLog[day] ?: 0L) + ms),
                 bookDays = d.bookDays + (day to (d.bookDays[day].orEmpty().let { m -> m + (bookId to (m[bookId] ?: 0L) + ms) })),
@@ -60,21 +74,50 @@ class AppViewModel(app: Application) : AndroidViewModel(app) {
         }
     }
 
+    fun setDailyGoal(minutes: Int) = updateSettings { it.copy(dailyGoalMin = minutes) }
+
+    fun saveReminder(r: Reminder) {
+        store.update { d -> d.copy(reminders = d.reminders.filterNot { it.id == r.id } + r) }
+        syncReminders()
+    }
+
+    fun deleteReminder(id: String) {
+        store.update { d -> d.copy(reminders = d.reminders.filterNot { it.id == id }) }
+        syncReminders()
+    }
+
+    /** Creates or replaces the plan for its book; [reminder] (or none) replaces the plan's own reminder. */
+    fun savePlan(plan: ReadingPlan, reminder: Reminder?) {
+        val rid = planReminderId(plan.bookId)
+        store.update { d ->
+            d.copy(
+                plans = d.plans.filterNot { it.bookId == plan.bookId } + plan,
+                reminders = d.reminders.filterNot { it.id == rid } + listOfNotNull(reminder?.copy(id = rid, bookId = plan.bookId)),
+            )
+        }
+        syncReminders()
+    }
+
+    fun deletePlan(bookId: String) {
+        store.update { d -> d.copy(plans = d.plans.filterNot { it.bookId == bookId }, reminders = d.reminders.filterNot { it.id == planReminderId(bookId) }) }
+        syncReminders()
+    }
+
+    fun planReminderId(bookId: String) = "plan-$bookId"
+
+    private fun syncReminders() = ReminderScheduler.sync(getApplication(), store.data.value.reminders)
+
     val avatarFile get() = java.io.File(getApplication<Application>().filesDir, "profile.jpg")
 
-    /** Saves the picked image as a 512px square profile picture. */
-    fun setAvatar(uri: Uri) = viewModelScope.launch {
+    /** Saves an already-cropped square image as the 512px profile picture. */
+    fun saveAvatar(bmp: android.graphics.Bitmap) = viewModelScope.launch {
         val ok = withContext(Dispatchers.IO) {
             runCatching {
-                val ctx = getApplication<Application>()
-                val src = ctx.contentResolver.openInputStream(uri)!!.use { android.graphics.BitmapFactory.decodeStream(it) }
-                val side = minOf(src.width, src.height)
-                val square = android.graphics.Bitmap.createBitmap(src, (src.width - side) / 2, (src.height - side) / 2, side, side)
-                val out = android.graphics.Bitmap.createScaledBitmap(square, 512, 512, true)
+                val out = if (bmp.width == 512 && bmp.height == 512) bmp else android.graphics.Bitmap.createScaledBitmap(bmp, 512, 512, true)
                 avatarFile.outputStream().use { out.compress(android.graphics.Bitmap.CompressFormat.JPEG, 90, it) }
             }.isSuccess
         }
-        if (ok) updateSettings { it.copy(avatarVersion = System.currentTimeMillis()) } else toast("Couldn't use that image")
+        if (ok) updateSettings { it.copy(avatarVersion = System.currentTimeMillis()) } else toast("Couldn't save that picture")
     }
 
     fun removeAvatar() {
@@ -92,6 +135,50 @@ class AppViewModel(app: Application) : AndroidViewModel(app) {
             .onFailure { toast("Couldn't open that file: ${it.message ?: "unknown error"}") }
         busy.value = null
     }
+
+    /** Imports several files one after another, reporting progress in the busy toast. */
+    fun importMany(uris: List<Uri>) = viewModelScope.launch {
+        if (uris.isEmpty()) return@launch
+        if (uris.size == 1) { import(uris[0]); return@launch }
+        var added = 0
+        uris.forEachIndexed { i, uri ->
+            busy.value = "Importing ${i + 1} of ${uris.size}…"
+            if (runCatching { importer.importUri(uri) }.isSuccess) added++
+        }
+        busy.value = null
+        val failed = uris.size - added
+        toast(if (failed == 0) "Added $added books" else "Added $added books · $failed couldn't be opened")
+    }
+
+    fun finishOnboarding() = store.update { it.copy(onboarded = true) }
+
+    /** Counts [n] more pages read in a book and in today's total. */
+    fun addPagesRead(bookId: String, n: Int = 1) {
+        val day = LocalDate.now().toString()
+        store.update { d ->
+            d.copy(
+                books = d.books.map { if (it.id == bookId) it.copy(pagesRead = it.pagesRead + n) else it },
+                pagesLog = d.pagesLog + (day to (d.pagesLog[day] ?: 0) + n),
+            )
+        }
+    }
+
+    fun createCollection(name: String, bookIds: List<String> = emptyList()): String {
+        val id = UUID.randomUUID().toString().take(12)
+        store.update { d -> d.copy(collections = d.collections + BookCollection(id, name.trim().ifBlank { "Untitled" }, bookIds.distinct())) }
+        return id
+    }
+
+    fun renameCollection(id: String, name: String) = updateCollection(id) { it.copy(name = name.trim().ifBlank { it.name }) }
+
+    fun deleteCollection(id: String) = store.update { d -> d.copy(collections = d.collections.filterNot { it.id == id }) }
+
+    fun addToCollection(id: String, bookIds: List<String>) = updateCollection(id) { it.copy(bookIds = (it.bookIds + bookIds).distinct()) }
+
+    fun removeFromCollection(id: String, bookIds: List<String>) = updateCollection(id) { it.copy(bookIds = it.bookIds - bookIds.toSet()) }
+
+    private fun updateCollection(id: String, f: (BookCollection) -> BookCollection) =
+        store.update { d -> d.copy(collections = d.collections.map { if (it.id == id) f(it) else it }) }
 
     fun markOpened(id: String) = store.updateBook(id) { it.copy(lastOpenedAt = System.currentTimeMillis()) }
 
@@ -179,7 +266,11 @@ class AppViewModel(app: Application) : AndroidViewModel(app) {
         added
     }
 
-    fun deleteBook(id: String) = store.deleteBook(id)
+    fun deleteBook(id: String) {
+        val hadPlan = store.data.value.plans.any { it.bookId == id }
+        store.deleteBook(id)
+        if (hadPlan) deletePlan(id)
+    }
 
     fun backup(uri: Uri) = viewModelScope.launch {
         busy.value = "Backing up…"

@@ -6,13 +6,18 @@ An open-source Android eReader for EPUB and PDF, built with Kotlin and Jetpack C
 
 ## Features
 
-- **Library** of EPUB and PDF books with covers, progress and reactions; add books with the **+** button.
+- **Library** of EPUB and PDF books with covers, progress and reactions; add several books at once with the **+** button.
+- **Collections**: select books and group them into named collections.
+- **Search** tab for books, authors, collections and highlights.
+- **First-run welcome**: a short splash, then set up your profile picture (with a circle cropper) and import your first books.
 - **Reading time**: today's minutes, a 7-day chart, streak and all-time totals, plus time spent in each book.
-- **Reader** with nine open-licence reading fonts, text size buttons and pinch-to-resize, page themes, line spacing and margins, contents and search.
+- **Reader** with ten open-licence reading fonts (including Libre Baskerville), text size buttons and pinch-to-resize, page themes, line spacing, adjustable margins, contents and search.
+- **Scroll or turn pages**: scroll through a whole chapter, or read one page at a time and tap or swipe to turn. Both show the page number, pages left in the chapter and a progress line.
+- **Reading tracker**: slide a finger along the right edge to move a marker through the text word by word or sentence by sentence.
 - **Highlights** across paragraphs with drag handles, a lens loupe, and a marker or underline style.
 - **Feed** of posts built on-device from chapter key ideas, recap carousels and your highlights.
 - **PDF** page view with zoom, plus a reflowed text mode split by the PDF outline.
-- **Make it yours**: accent palettes, light/dark/system mode, pure black, two bottom-bar styles, symbol or Noto 3D emoji icons, and a profile picture.
+- **Make it yours**: accent palettes, light/dark/system mode, pure black, two bottom-bar styles with a separate search button, symbol or Noto 3D emoji icons, and a profile picture.
 - **Google Drive** backup, restore and import through the system file picker.
 
 ## Build

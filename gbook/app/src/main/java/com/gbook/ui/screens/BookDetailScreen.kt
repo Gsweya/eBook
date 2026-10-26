@@ -21,9 +21,11 @@ import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.foundation.verticalScroll
 import androidx.compose.material.icons.Icons
+import androidx.compose.material.icons.rounded.CollectionsBookmark
 import androidx.compose.material.icons.rounded.AutoAwesome
 import androidx.compose.material.icons.rounded.Close
 import androidx.compose.material.icons.rounded.CloudUpload
+import androidx.compose.material.icons.rounded.EventAvailable
 import androidx.compose.material.icons.rounded.DeleteOutline
 import androidx.compose.material3.AlertDialog
 import androidx.compose.material3.Text
@@ -68,6 +70,8 @@ fun BookDetailScreen(vm: AppViewModel, id: String, nav: Nav) {
     val posts = data.posts.count { it.bookId == id }
     var confirmDelete by remember { mutableStateOf(false) }
     var showGenerate by remember { mutableStateOf(false) }
+    var showPlan by remember { mutableStateOf(false) }
+    var showCollections by remember { mutableStateOf(false) }
     val save = rememberLauncherForActivityResult(ActivityResultContracts.CreateDocument(if (book.format == BookFormat.PDF) "application/pdf" else "application/epub+zip")) {
         it?.let { uri -> vm.exportBook(book, uri) }
     }
@@ -104,6 +108,7 @@ fun BookDetailScreen(vm: AppViewModel, id: String, nav: Nav) {
                         if (book.chapterCount > 0) add("${book.chapterCount} chapters")
                         add("${(book.progress * 100).toInt()}% read")
                         if (book.readingMs > 0) add(com.gbook.ui.components.formatDuration(book.readingMs) + " reading")
+                        if (book.pagesRead > 0) add("${book.pagesRead} pages read")
                     }.joinToString(" · ")
                     Text(meta, color = Color.White, fontSize = 15.sp, modifier = Modifier.padding(bottom = 14.dp))
                     PrimaryButton(
@@ -116,6 +121,15 @@ fun BookDetailScreen(vm: AppViewModel, id: String, nav: Nav) {
                     PillButton("Create Posts", { showGenerate = true }, Modifier.weight(1f), icon = Icons.Rounded.AutoAwesome, tint = onTint, contentColor = Color.White)
                     PillButton("Save to Drive", { save.launch(book.title + if (book.format == BookFormat.PDF) ".pdf" else ".epub") }, Modifier.weight(1f), icon = Icons.Rounded.CloudUpload, tint = onTint, contentColor = Color.White)
                 }
+                val plan = data.plans.firstOrNull { it.bookId == book.id }
+                if (plan != null) PlanCard(vm, plan, book, onClick = { showPlan = true }, Modifier.padding(top = 12.dp))
+                else PillButton("Make a reading plan", { showPlan = true }, Modifier.fillMaxWidth().padding(top = 10.dp), icon = Icons.Rounded.EventAvailable, tint = onTint, contentColor = Color.White)
+                val inCollections = data.collections.filter { book.id in it.bookIds }.map { it.name }
+                PillButton(
+                    if (inCollections.isEmpty()) "Add to Collection" else "In " + inCollections.joinToString(", "),
+                    { showCollections = true }, Modifier.fillMaxWidth().padding(top = 10.dp),
+                    icon = Icons.Rounded.CollectionsBookmark, tint = onTint, contentColor = Color.White,
+                )
             }
             Spacer(Modifier.height(28.dp))
             Column(
@@ -154,6 +168,8 @@ fun BookDetailScreen(vm: AppViewModel, id: String, nav: Nav) {
         )
     }
     if (showGenerate) GeneratePostsSheet(vm, onDismiss = { showGenerate = false }, preselect = book.id)
+    if (showPlan) PlanSheet(vm, book, onDismiss = { showPlan = false })
+    if (showCollections) AddToCollectionSheet(vm, listOf(book.id), onDismiss = { showCollections = false })
     if (confirmDelete) AlertDialog(
         onDismissRequest = { confirmDelete = false },
         shape = RoundedCornerShape(34.dp),

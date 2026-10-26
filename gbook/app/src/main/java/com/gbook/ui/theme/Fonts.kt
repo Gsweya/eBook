@@ -18,6 +18,7 @@ val SourceSerif = family(R.font.sourceserif_400 to 400, R.font.sourceserif_600 t
 val Newsreader = family(R.font.newsreader_400 to 400, R.font.newsreader_600 to 600, R.font.newsreader_700 to 700)
 val Gelasio = family(R.font.gelasio_400 to 400, R.font.gelasio_600 to 600, R.font.gelasio_700 to 700)
 val CrimsonPro = family(R.font.crimson_400 to 400, R.font.crimson_600 to 600, R.font.crimson_700 to 700)
+val LibreBaskerville = family(R.font.librebaskerville_400 to 400, R.font.librebaskerville_600 to 600, R.font.librebaskerville_700 to 700)
 val EBGaramond = family(R.font.garamond_400 to 400, R.font.garamond_600 to 600, R.font.garamond_700 to 700)
 val Inter = family(R.font.inter_400 to 400, R.font.inter_500 to 500, R.font.inter_600 to 600, R.font.inter_700 to 700)
 val DMSans = family(R.font.dmsans_400 to 400, R.font.dmsans_500 to 500, R.font.dmsans_600 to 600, R.font.dmsans_700 to 700)
@@ -42,6 +43,7 @@ val ReadingFonts = listOf(
     ReadingFont("gelasio", "Gelasio", "Georgia", Gelasio),
     ReadingFont("crimson", "Crimson Pro", "Athelas", CrimsonPro),
     ReadingFont("garamond", "EB Garamond", "Palatino", EBGaramond),
+    ReadingFont("baskerville", "Libre Baskerville", "Baskerville", LibreBaskerville),
     ReadingFont("inter", "Inter", "San Francisco", Inter),
     ReadingFont("dmsans", "DM Sans", "Avenir Next", DMSans),
 )

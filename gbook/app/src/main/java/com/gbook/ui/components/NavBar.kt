@@ -92,6 +92,9 @@ fun FloatingNavBar(
     emojiIcons: Boolean,
     modifier: Modifier = Modifier,
     onAdd: (() -> Unit)? = null,
+    /** Separate round button beside the bar (iOS 26 style); [selected] is -1 while it is the active screen. */
+    search: NavBarItem? = null,
+    onSearch: () -> Unit = {},
 ) {
     val g = LocalG.current
     val haptics = rememberHaptics()
@@ -110,22 +113,24 @@ fun FloatingNavBar(
     val current by rememberUpdatedState(selected)
 
     LaunchedEffect(selected) {
-        if (!dragging) pos.animateTo(slotOf(selected).toFloat(), spring(dampingRatio = 0.66f, stiffness = 420f))
+        if (!dragging && selected >= 0) pos.animateTo(slotOf(selected).toFloat(), spring(dampingRatio = 0.66f, stiffness = 420f))
     }
     val shown = if (dragging) dragPos else pos.value
-    val activeSlot = shown.roundToInt()
+    val activeSlot = if (selected < 0 && !dragging) -1 else shown.roundToInt()
 
-    Box(
+    val shape = CircleShape
+    val edge = if (g.dark) Brush.verticalGradient(listOf(Color.White.copy(alpha = 0.27f), Color.White.copy(alpha = 0.02f)))
+    else Brush.verticalGradient(listOf(Color.Black.copy(alpha = 0.04f), Color.Black.copy(alpha = 0.10f)))
+    val fill = if (g.dark) Color(0xFF1C1C1E) else Color.White
+    val side = if (search != null) 16.dp else 28.dp
+    Row(
         modifier.fillMaxWidth().navigationBarsPadding()
-            .padding(bottom = 10.dp, start = 28.dp + 30.dp * (1f - labels), end = 28.dp + 30.dp * (1f - labels)),
-        contentAlignment = Alignment.BottomCenter,
+            .padding(bottom = 10.dp, start = side + 30.dp * (1f - labels), end = side + 30.dp * (1f - labels)),
+        verticalAlignment = Alignment.CenterVertically,
+        horizontalArrangement = androidx.compose.foundation.layout.Arrangement.Center,
     ) {
-        val shape = CircleShape
-        val edge = if (g.dark) Brush.verticalGradient(listOf(Color.White.copy(alpha = 0.27f), Color.White.copy(alpha = 0.02f)))
-        else Brush.verticalGradient(listOf(Color.Black.copy(alpha = 0.04f), Color.Black.copy(alpha = 0.10f)))
-        val fill = if (g.dark) Color(0xFF1C1C1E) else Color.White
         Box(
-            Modifier.widthIn(max = 420.dp).fillMaxWidth().height(50.dp + 16.dp * labels)
+            Modifier.weight(1f, fill = false).widthIn(max = 420.dp).fillMaxWidth().height(50.dp + 16.dp * labels)
                 .graphicsLayer { val s = 1f + 0.025f * press; scaleX = s; scaleY = s }
                 .shadow(if (g.dark) 0.dp else 14.dp, shape, ambientColor = Color.Black.copy(alpha = 0.10f), spotColor = Color.Black.copy(alpha = 0.16f))
                 .clip(shape)
@@ -186,7 +191,7 @@ fun FloatingNavBar(
                         Brush.radialGradient(listOf(g.accent.copy(alpha = 0.22f * press), Color.Transparent), Offset(cx, size.height / 2), size.width * 0.45f),
                         size.width * 0.45f, Offset(cx, size.height / 2),
                     )
-                    drawRoundRect(
+                    if (activeSlot >= 0) drawRoundRect(
                         g.accent.copy(alpha = 0.15f),
                         Offset(cx - w / 2, (size.height - h) / 2), Size(w, h), CornerRadius(h / 2),
                     )
@@ -211,6 +216,30 @@ fun FloatingNavBar(
                         }
                     }
                 }
+            }
+        }
+        if (search != null) {
+            val on = selected < 0
+            androidx.compose.foundation.layout.Spacer(Modifier.size(10.dp))
+            Box(
+                Modifier.size(50.dp + 16.dp * labels)
+                    .shadow(if (g.dark) 0.dp else 14.dp, shape, ambientColor = Color.Black.copy(alpha = 0.10f), spotColor = Color.Black.copy(alpha = 0.16f))
+                    .clip(shape)
+                    .then(
+                        if (haze != null) Modifier.hazeEffect(haze) {
+                            blurRadius = 24.dp
+                            backgroundColor = fill
+                            tints = listOf(HazeTint(fill.copy(alpha = if (g.dark) 0.55f else 0.72f)))
+                            noiseFactor = 0f
+                        } else Modifier.background(fill.copy(alpha = 0.92f)),
+                    )
+                    .border(0.75.dp, edge, shape)
+                    .then(if (on) Modifier.background(g.accent.copy(alpha = 0.15f)) else Modifier)
+                    .clickable(role = Role.Tab) { haptics.tap(); onSearch() },
+                contentAlignment = Alignment.Center,
+            ) {
+                val color by animateColorAsState(if (on) g.accent else g.text2, label = "search")
+                NavIcon(search, on, emojiIcons, 24.dp + 2.dp * labels, color, gradient = true)
             }
         }
     }

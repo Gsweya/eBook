@@ -1,6 +1,18 @@
 package com.gbook.ui.screens
 
+import androidx.activity.compose.BackHandler
 import androidx.activity.compose.rememberLauncherForActivityResult
+import androidx.compose.animation.AnimatedVisibility
+import androidx.compose.animation.fadeIn
+import androidx.compose.animation.fadeOut
+import androidx.compose.animation.slideInVertically
+import androidx.compose.animation.slideOutVertically
+import androidx.compose.material.icons.rounded.CollectionsBookmark
+import androidx.compose.material.icons.rounded.Search
+import androidx.compose.runtime.LaunchedEffect
+import androidx.compose.runtime.mutableStateListOf
+import androidx.compose.ui.graphics.graphicsLayer
+import com.gbook.ui.components.PrimaryButton
 import androidx.activity.result.contract.ActivityResultContracts
 import androidx.compose.animation.AnimatedContent
 import androidx.compose.animation.animateContentSize
@@ -97,6 +109,7 @@ private enum class Tab(val label: String, val icon: ImageVector, val emoji: Int)
     Feed("Feed", Icons.Rounded.DynamicFeed, R.drawable.noto3d_feed),
     Highlights("Highlights", Icons.Rounded.FormatQuote, R.drawable.noto3d_highlights),
     Settings("Settings", Icons.Rounded.Settings, R.drawable.noto3d_settings),
+    Search("Search", Icons.Rounded.Search, R.drawable.noto3d_search),
 }
 
 @Composable
@@ -111,9 +124,7 @@ fun HomeScreen(vm: AppViewModel, nav: Nav) {
     var showGenerate by remember { mutableStateOf(false) }
     // Nav bar labels fold away while scrolling down.
     var collapsed by remember { mutableStateOf(false) }
-    val picker = rememberLauncherForActivityResult(ActivityResultContracts.OpenDocument()) { uri ->
-        uri?.let { vm.import(it) }
-    }
+    val picker = rememberLauncherForActivityResult(ActivityResultContracts.OpenMultipleDocuments()) { uris -> vm.importMany(uris) }
     val importBooks = { picker.launch(arrayOf("application/epub+zip", "application/pdf", "application/octet-stream")) }
 
     Box(Modifier.fillMaxSize().background(g.bg)) {
@@ -124,6 +135,7 @@ fun HomeScreen(vm: AppViewModel, nav: Nav) {
                     Tab.Feed -> FeedTab(vm, nav, onGenerate = { showGenerate = true }, onScrollDir = { collapsed = it })
                     Tab.Highlights -> HighlightsTab(vm, nav, onScrollDir = { collapsed = it })
                     Tab.Settings -> SettingsTab(vm, settingsPage, { settingsPage = it }, onScrollDir = { collapsed = it })
+                    Tab.Search -> SearchTab(vm, nav, onScrollDir = { collapsed = it })
                 }
             }
         }
@@ -154,9 +166,13 @@ fun HomeScreen(vm: AppViewModel, nav: Nav) {
         }
         val emoji = data.settings.navIcons == 1
         if (data.settings.navStyle == 1) {
+            // Classic bar: Search is the last item, so it gets the separate round button.
             ClassicNavBar(items, tab.ordinal, onSelect, collapsed, haze, emoji, Modifier.align(Alignment.BottomCenter))
         } else {
-            FloatingNavBar(items, tab.ordinal, onSelect, collapsed, haze, emoji, Modifier.align(Alignment.BottomCenter))
+            FloatingNavBar(
+                items.dropLast(1), if (tab == Tab.Search) -1 else tab.ordinal, onSelect, collapsed, haze, emoji, Modifier.align(Alignment.BottomCenter),
+                search = items.last(), onSearch = { tab = Tab.Search; collapsed = false },
+            )
         }
     }
     if (showThemes) ThemeSheet(vm, onDismiss = { showThemes = false })
@@ -192,11 +208,24 @@ private fun LibraryTab(vm: AppViewModel, nav: Nav, onImport: () -> Unit, onScrol
     val current = books.firstOrNull { it.lastOpenedAt > 0 }
     val grid = rememberLazyGridState()
     var showActivity by remember { mutableStateOf(false) }
+    // Long-press a cover to start selecting books, e.g. to group them into a collection.
+    val selected = remember { mutableStateListOf<String>() }
+    val selecting = selected.isNotEmpty()
+    var addToCollection by remember { mutableStateOf<List<String>?>(null) }
+    var newCollection by remember { mutableStateOf(false) }
+    BackHandler(selecting) { selected.clear() }
+    addToCollection?.let { ids -> AddToCollectionSheet(vm, ids, onDismiss = { addToCollection = null; selected.clear() }) }
+    if (newCollection) NameDialog("New Collection", "", "Create", onDismiss = { newCollection = false }) { name ->
+        newCollection = false
+        nav.push(Route.Collection(vm.createCollection(name)))
+    }
     if (showActivity) ReadingActivitySheet(
         vm, onOpen = { b -> showActivity = false; vm.markOpened(b.id); nav.open(b) }, onDismiss = { showActivity = false },
     )
     ScrollDirection(grid.firstVisibleItemIndex, grid.firstVisibleItemScrollOffset, onScrollDir)
+    LaunchedEffect(selecting) { if (selecting) onScrollDir(true) }
 
+    Box(Modifier.fillMaxSize()) {
     LazyVerticalGrid(
         columns = GridCells.Fixed(3),
         state = grid,
@@ -211,7 +240,14 @@ private fun LibraryTab(vm: AppViewModel, nav: Nav, onImport: () -> Unit, onScrol
             }
         }
         item(span = { GridItemSpan(3) }) {
-            ReadingStatsCard(data.readingLog, data.books.sumOf { it.readingMs }, onClick = { showActivity = true })
+            ReadingStatsCard(data.readingLog, data.books.sumOf { it.readingMs }, data.settings.dailyGoalMin, onClick = { showActivity = true })
+        }
+        val plans = data.plans.mapNotNull { p -> books.firstOrNull { it.id == p.bookId }?.let { p to it } }
+        if (plans.isNotEmpty()) item(span = { GridItemSpan(3) }) {
+            Column(verticalArrangement = Arrangement.spacedBy(10.dp)) {
+                Text("Plans", style = GType.section, color = g.text, modifier = Modifier.padding(bottom = 2.dp))
+                plans.forEach { (p, b) -> PlanCard(vm, p, b, onClick = { nav.push(Route.Detail(b.id)) }) }
+            }
         }
         if (current != null) {
             item(span = { GridItemSpan(3) }) {
@@ -221,11 +257,26 @@ private fun LibraryTab(vm: AppViewModel, nav: Nav, onImport: () -> Unit, onScrol
                 }
             }
         }
+        if (books.isNotEmpty()) item(span = { GridItemSpan(3) }) {
+            Column {
+                Row(verticalAlignment = Alignment.Bottom, modifier = Modifier.padding(bottom = 12.dp)) {
+                    Text("Collections", style = GType.section, color = g.text)
+                    Spacer(Modifier.width(8.dp))
+                    if (data.collections.isNotEmpty()) Text("${data.collections.size}", style = GType.secondary, color = g.text2, modifier = Modifier.padding(bottom = 3.dp))
+                }
+                CollectionsRow(vm, data.collections, data.books, onOpen = { nav.push(Route.Collection(it.id)) }, onNew = { newCollection = true })
+            }
+        }
         item(span = { GridItemSpan(3) }) {
             Row(verticalAlignment = Alignment.Bottom) {
                 Text("All Books", style = GType.section, color = g.text)
                 Spacer(Modifier.width(8.dp))
                 Text("${books.size}", style = GType.secondary, color = g.text2, modifier = Modifier.padding(bottom = 3.dp))
+                Spacer(Modifier.weight(1f))
+                if (books.isNotEmpty()) Text(
+                    if (selecting) "Done" else "Select", color = g.accent, fontSize = 16.sp, fontWeight = FontWeight.SemiBold,
+                    modifier = Modifier.clip(CircleShape).clickable { if (selecting) selected.clear() else selected.add(books.first().id) }.padding(horizontal = 6.dp, vertical = 4.dp),
+                )
             }
         }
         if (books.isEmpty()) {
@@ -234,10 +285,21 @@ private fun LibraryTab(vm: AppViewModel, nav: Nav, onImport: () -> Unit, onScrol
             }
         }
         items(books, key = { it.id }) { b ->
+            val on = b.id in selected
             Column(Modifier.animateItem()) {
-                Box(Modifier.combinedClickable(onClick = { vm.markOpened(b.id); nav.open(b) }, onLongClick = { nav.push(Route.Detail(b.id)) })) {
-                    BookCover(vm.coverPath(b), b.title, b.author, b.coverColor, Modifier.fillMaxWidth())
-                    if (b.myReaction != null) {
+                Box(
+                    Modifier.combinedClickable(
+                        onClick = {
+                            if (selecting) { if (on) selected.remove(b.id) else selected.add(b.id) }
+                            else { vm.markOpened(b.id); nav.open(b) }
+                        },
+                        onLongClick = { if (!on) selected.add(b.id) },
+                    ),
+                ) {
+                    val scale by animateFloatAsState(if (on) 0.92f else 1f, label = "sel")
+                    BookCover(vm.coverPath(b), b.title, b.author, b.coverColor, Modifier.fillMaxWidth().graphicsLayer { scaleX = scale; scaleY = scale })
+                    if (selecting) SelectMark(on, Modifier.align(Alignment.TopEnd).padding(6.dp))
+                    else if (b.myReaction != null) {
                         Text(b.myReaction, fontSize = 14.sp, modifier = Modifier.align(Alignment.TopEnd).padding(4.dp).panel(CircleShape, elevation = 2.dp).padding(4.dp))
                     }
                 }
@@ -262,6 +324,15 @@ private fun LibraryTab(vm: AppViewModel, nav: Nav, onImport: () -> Unit, onScrol
                 }
             }
         }
+    }
+    AnimatedVisibility(
+        selecting, Modifier.align(Alignment.BottomCenter).padding(bottom = 72.dp),
+        enter = fadeIn() + slideInVertically { it }, exit = fadeOut() + slideOutVertically { it },
+    ) {
+        SelectionActions(selected.size, onCancel = { selected.clear() }) {
+            PrimaryButton("Add to Collection", { addToCollection = selected.toList() }, icon = Icons.Rounded.CollectionsBookmark)
+        }
+    }
     }
 }
 

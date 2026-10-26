@@ -1,6 +1,16 @@
 package com.gbook.ui.components
 
 import android.os.SystemClock
+import androidx.compose.animation.AnimatedVisibility
+import androidx.compose.animation.fadeIn
+import androidx.compose.animation.fadeOut
+import androidx.compose.animation.slideInVertically
+import androidx.compose.animation.slideOutVertically
+import androidx.compose.foundation.layout.statusBarsPadding
+import androidx.compose.runtime.collectAsState
+import androidx.compose.runtime.getValue
+import androidx.compose.runtime.mutableStateOf
+import androidx.compose.runtime.setValue
 import androidx.compose.foundation.background
 import androidx.compose.foundation.clickable
 import androidx.compose.foundation.layout.size
@@ -96,7 +106,7 @@ fun readingStreak(log: Map<String, Long>): Int {
 
 /** Today's reading time, a 7-day bar chart and week / streak / total figures. */
 @Composable
-fun ReadingStatsCard(log: Map<String, Long>, totalMs: Long, onClick: () -> Unit, modifier: Modifier = Modifier) {
+fun ReadingStatsCard(log: Map<String, Long>, totalMs: Long, goalMin: Int, onClick: () -> Unit, modifier: Modifier = Modifier) {
     val g = LocalG.current
     val today = LocalDate.now()
     val days = (6 downTo 0).map { today.minusDays(it.toLong()) }
@@ -115,6 +125,7 @@ fun ReadingStatsCard(log: Map<String, Long>, totalMs: Long, onClick: () -> Unit,
                     Icon(Icons.AutoMirrored.Rounded.KeyboardArrowRight, "Reading activity", tint = g.text2, modifier = Modifier.size(18.dp))
                 }
                 Text(formatDuration(values.last()), fontFamily = DisplaySerif, fontWeight = FontWeight.Bold, fontSize = 30.sp, color = g.text)
+                if (goalMin > 0) GoalProgress(values.last(), goalMin)
             }
             // Last 7 days; today's bar uses the accent gradient.
             Row(Modifier.height(64.dp), horizontalArrangement = Arrangement.spacedBy(6.dp), verticalAlignment = Alignment.Bottom) {
@@ -153,5 +164,60 @@ private fun Stat(label: String, value: String, modifier: Modifier) {
     Column(modifier) {
         Text(value, fontSize = 16.sp, fontWeight = FontWeight.SemiBold, color = g.text)
         Text(label, fontSize = 12.sp, color = g.text2)
+    }
+}
+
+/** Progress towards the daily goal; once reached, shows how far past it today's reading went. */
+@Composable
+fun GoalProgress(todayMs: Long, goalMin: Int) {
+    val g = LocalG.current
+    val goalMs = goalMin * 60_000L
+    val reached = todayMs >= goalMs
+    Column(Modifier.padding(top = 6.dp, end = 16.dp)) {
+        Box(Modifier.fillMaxWidth().height(6.dp).clip(RoundedCornerShape(3.dp)).background(g.fill)) {
+            Box(Modifier.fillMaxWidth((todayMs.toFloat() / goalMs).coerceIn(0f, 1f)).fillMaxHeight().clip(RoundedCornerShape(3.dp)).background(g.accentBrush))
+        }
+        Text(
+            if (reached) {
+                val extra = (todayMs - goalMs) / 60_000
+                "Goal reached 🎉" + if (extra > 0) " · +$extra min" else ""
+            } else "of $goalMin min goal",
+            fontSize = 12.sp, color = if (reached) g.accent else g.text2, fontWeight = if (reached) FontWeight.SemiBold else FontWeight.Normal,
+            modifier = Modifier.padding(top = 4.dp),
+        )
+    }
+}
+
+/** Celebrates reaching the daily goal while reading, then gets out of the way so reading can continue. */
+@Composable
+fun GoalBanner(vm: AppViewModel, modifier: Modifier = Modifier) {
+    val g = LocalG.current
+    val haptics = rememberHaptics()
+    val hit by vm.goalReached.collectAsState()
+    var shown by remember { mutableStateOf<Long?>(null) }
+    LaunchedEffect(hit) {
+        val m = hit ?: return@LaunchedEffect
+        shown = m
+        haptics.select()
+        delay(5_000)
+        shown = null
+        vm.goalReached.value = null
+    }
+    AnimatedVisibility(shown != null, modifier, enter = fadeIn() + slideInVertically { -it }, exit = fadeOut() + slideOutVertically { -it }) {
+        Row(
+            Modifier.statusBarsPadding().padding(horizontal = 16.dp, vertical = 8.dp).fillMaxWidth()
+                .panel(RoundedCornerShape(24.dp)).padding(horizontal = 18.dp, vertical = 14.dp),
+            verticalAlignment = Alignment.CenterVertically,
+        ) {
+            Text("🎉", fontSize = 30.sp)
+            Spacer(Modifier.width(14.dp))
+            Column {
+                Text("Daily goal reached!", fontSize = 17.sp, fontWeight = FontWeight.SemiBold, color = g.text)
+                Text(
+                    "${shown ?: 0} min today — keep going, the extra time counts too.",
+                    fontSize = 14.sp, color = g.text2,
+                )
+            }
+        }
     }
 }

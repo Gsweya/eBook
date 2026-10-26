@@ -36,6 +36,8 @@ data class Book(
     val backedUpAt: Long = 0,
     /** Total active reading time in this book. */
     val readingMs: Long = 0,
+    /** Pages the reader has dwelt on long enough to count as read, in either reading mode. */
+    val pagesRead: Int = 0,
 )
 
 @Serializable
@@ -115,6 +117,14 @@ data class ReaderSettings(
     val profileName: String = "",
     /** Changes whenever the profile picture changes; 0 means none. */
     val avatarVersion: Long = 0,
+    /** Daily reading goal in minutes; 0 means no goal. */
+    val dailyGoalMin: Int = 0,
+    /** 0 scroll through the whole chapter, 1 one page at a time, turned by tapping or swiping. */
+    val pageMode: Int = 0,
+    /** Side strip that walks a marker through the text as the finger slides along it. */
+    val tracker: Boolean = false,
+    /** Tracker step: 0 word, 1 sentence. */
+    val trackerUnit: Int = 0,
 )
 
 @Serializable
@@ -129,6 +139,44 @@ data class LibraryData(
     val readingLog: Map<String, Long> = emptyMap(),
     /** Active reading time per local day, per book id. */
     val bookDays: Map<String, Map<String, Long>> = emptyMap(),
+    val reminders: List<Reminder> = emptyList(),
+    val plans: List<ReadingPlan> = emptyList(),
+    /** Last day ("yyyy-MM-dd") the daily goal was celebrated, so it is announced once a day. */
+    val goalReachedDay: String = "",
+    val collections: List<BookCollection> = emptyList(),
+    /** Pages read per local day, across all books. */
+    val pagesLog: Map<String, Int> = emptyMap(),
+    /** Whether the first-run welcome (profile and first books) has been completed or skipped. */
+    val onboarded: Boolean = false,
+)
+
+/** A named, user-made group of books. */
+@Serializable
+data class BookCollection(
+    val id: String,
+    val name: String,
+    val bookIds: List<String> = emptyList(),
+    val createdAt: Long = System.currentTimeMillis(),
+)
+
+/** A reading reminder at [hour]:[minute] on [days] (ISO day numbers, Monday = 1). [bookId] ties it to a book. */
+@Serializable
+data class Reminder(
+    val id: String,
+    val hour: Int,
+    val minute: Int,
+    val days: Set<Int> = (1..7).toSet(),
+    val enabled: Boolean = true,
+    val bookId: String? = null,
+)
+
+/** Goal to finish [bookId] by [targetDate]; [startProgress] on [startDate] anchors the on-track check. Dates are "yyyy-MM-dd". */
+@Serializable
+data class ReadingPlan(
+    val bookId: String,
+    val targetDate: String,
+    val startDate: String,
+    val startProgress: Float,
 )
 
 @Serializable

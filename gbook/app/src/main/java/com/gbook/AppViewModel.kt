@@ -20,6 +20,7 @@ import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.StateFlow
 import kotlinx.coroutines.launch
 import kotlinx.coroutines.withContext
+import java.time.LocalDate
 import java.util.UUID
 
 class AppViewModel(app: Application) : AndroidViewModel(app) {
@@ -45,6 +46,40 @@ class AppViewModel(app: Application) : AndroidViewModel(app) {
     }
 
     fun toast(msg: String) { toast.value = msg }
+
+    /** Adds active reading time to a book and to today's total. */
+    fun addReadingTime(bookId: String, ms: Long) {
+        if (ms <= 0) return
+        val day = LocalDate.now().toString()
+        store.update { d ->
+            d.copy(
+                books = d.books.map { if (it.id == bookId) it.copy(readingMs = it.readingMs + ms) else it },
+                readingLog = d.readingLog + (day to (d.readingLog[day] ?: 0L) + ms),
+            )
+        }
+    }
+
+    val avatarFile get() = java.io.File(getApplication<Application>().filesDir, "profile.jpg")
+
+    /** Saves the picked image as a 512px square profile picture. */
+    fun setAvatar(uri: Uri) = viewModelScope.launch {
+        val ok = withContext(Dispatchers.IO) {
+            runCatching {
+                val ctx = getApplication<Application>()
+                val src = ctx.contentResolver.openInputStream(uri)!!.use { android.graphics.BitmapFactory.decodeStream(it) }
+                val side = minOf(src.width, src.height)
+                val square = android.graphics.Bitmap.createBitmap(src, (src.width - side) / 2, (src.height - side) / 2, side, side)
+                val out = android.graphics.Bitmap.createScaledBitmap(square, 512, 512, true)
+                avatarFile.outputStream().use { out.compress(android.graphics.Bitmap.CompressFormat.JPEG, 90, it) }
+            }.isSuccess
+        }
+        if (ok) updateSettings { it.copy(avatarVersion = System.currentTimeMillis()) } else toast("Couldn't use that image")
+    }
+
+    fun removeAvatar() {
+        avatarFile.delete()
+        updateSettings { it.copy(avatarVersion = 0) }
+    }
 
     fun coverPath(b: Book): String? = if (b.hasCover) store.coverFile(b.id).path else null
     fun imagePath(bookId: String, src: String) = java.io.File(store.imagesDir(bookId), src).path

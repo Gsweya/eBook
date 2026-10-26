@@ -17,6 +17,7 @@ import androidx.compose.ui.layout.layout
 import androidx.compose.ui.platform.LocalDensity
 import androidx.compose.ui.unit.Constraints
 import com.gbook.ui.components.rememberHaptics
+import com.gbook.ui.components.TrackReadingTime
 import androidx.compose.ui.draw.drawWithContent
 import androidx.compose.ui.draw.shadow
 import androidx.compose.ui.draw.drawBehind
@@ -339,6 +340,9 @@ private fun ReaderContent(
             ((chapter + frac) / chapters.size).coerceIn(0f, 1f)
         }
     }
+
+    val scrollActivity by remember(listState) { derivedStateOf { listState.firstVisibleItemIndex * 10 + listState.firstVisibleItemScrollOffset / 300 } }
+    TrackReadingTime(vm, book.id, Triple(chapter, scrollActivity, chrome))
 
     LaunchedEffect(listState, chapter) {
         snapshotFlow { listState.firstVisibleItemIndex to listState.firstVisibleItemScrollOffset }

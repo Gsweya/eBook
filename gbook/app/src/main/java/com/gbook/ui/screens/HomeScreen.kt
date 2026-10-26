@@ -68,12 +68,17 @@ import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import com.gbook.AppViewModel
+import com.gbook.R
 import com.gbook.Nav
 import com.gbook.Route
 import com.gbook.data.Book
 import com.gbook.data.BookFormat
 import com.gbook.data.Highlight
+import com.gbook.ui.components.Avatar
 import com.gbook.ui.components.BookCover
+import com.gbook.ui.components.ClassicNavBar
+import com.gbook.ui.components.ReadingStatsCard
+import com.gbook.ui.components.formatDuration
 import com.gbook.ui.components.FloatingNavBar
 import com.gbook.ui.components.NavBarItem
 import com.gbook.ui.components.IconCircle
@@ -86,18 +91,21 @@ import com.gbook.ui.theme.QuoteSerif
 import dev.chrisbanes.haze.hazeSource
 import dev.chrisbanes.haze.rememberHazeState
 
-private enum class Tab(val label: String, val icon: ImageVector) {
-    Library("Library", Icons.Rounded.LocalLibrary),
-    Feed("Feed", Icons.Rounded.DynamicFeed),
-    Highlights("Highlights", Icons.Rounded.FormatQuote),
-    Settings("Settings", Icons.Rounded.Settings),
+private enum class Tab(val label: String, val icon: ImageVector, val emoji: Int) {
+    Library("Library", Icons.Rounded.LocalLibrary, R.drawable.noto3d_library),
+    Feed("Feed", Icons.Rounded.DynamicFeed, R.drawable.noto3d_feed),
+    Highlights("Highlights", Icons.Rounded.FormatQuote, R.drawable.noto3d_highlights),
+    Settings("Settings", Icons.Rounded.Settings, R.drawable.noto3d_settings),
 }
 
 @Composable
 fun HomeScreen(vm: AppViewModel, nav: Nav) {
     val g = LocalG.current
     val haze = rememberHazeState()
+    val data by vm.data.collectAsState()
     var tab by rememberSaveable { mutableStateOf(Tab.Library) }
+    // Open settings sub-page, hoisted so the Library avatar can jump straight to the profile.
+    var settingsPage by rememberSaveable { mutableStateOf<String?>(null) }
     var showThemes by remember { mutableStateOf(false) }
     var showGenerate by remember { mutableStateOf(false) }
     // Nav bar labels fold away while scrolling down.
@@ -114,7 +122,7 @@ fun HomeScreen(vm: AppViewModel, nav: Nav) {
                     Tab.Library -> LibraryTab(vm, nav, onImport = importBooks, onScrollDir = { collapsed = it })
                     Tab.Feed -> FeedTab(vm, nav, onGenerate = { showGenerate = true }, onScrollDir = { collapsed = it })
                     Tab.Highlights -> HighlightsTab(vm, nav, onScrollDir = { collapsed = it })
-                    Tab.Settings -> SettingsTab(vm, onScrollDir = { collapsed = it })
+                    Tab.Settings -> SettingsTab(vm, settingsPage, { settingsPage = it }, onScrollDir = { collapsed = it })
                 }
             }
         }
@@ -124,22 +132,31 @@ fun HomeScreen(vm: AppViewModel, nav: Nav) {
                 .background(Brush.verticalGradient(listOf(g.bg, g.bg.copy(alpha = 0f)))),
         )
         Box(Modifier.fillMaxWidth().windowInsetsTopHeight(WindowInsets.statusBars).background(g.bg))
-        Box(Modifier.fillMaxWidth().statusBarsPadding().padding(top = 6.dp, end = 16.dp), contentAlignment = Alignment.TopEnd) {
+        Box(Modifier.fillMaxWidth().statusBarsPadding().padding(top = 6.dp, start = 16.dp, end = 16.dp), contentAlignment = Alignment.TopEnd) {
+            if (tab == Tab.Library) Avatar(
+                vm.avatarFile, data.settings.avatarVersion, data.settings.profileName, 44.dp,
+                Modifier.align(Alignment.TopStart).clip(CircleShape).clickable { tab = Tab.Settings; settingsPage = "profile" },
+            )
             when (tab) {
-                Tab.Library -> IconCircle(Icons.Rounded.Palette, "Themes", { showThemes = true }, size = 44.dp)
+                Tab.Library -> Row(horizontalArrangement = Arrangement.spacedBy(10.dp)) {
+                    IconCircle(Icons.Rounded.Palette, "Themes", { showThemes = true }, size = 44.dp)
+                    IconCircle(Icons.Rounded.Add, "Add books", importBooks, size = 44.dp)
+                }
                 Tab.Feed -> IconCircle(Icons.Rounded.AutoAwesome, "Create posts", { showGenerate = true }, size = 44.dp)
                 else -> Unit
             }
         }
-        FloatingNavBar(
-            items = Tab.entries.map { NavBarItem(it.label, it.icon) },
-            selected = tab.ordinal,
-            onSelect = { tab = Tab.entries[it]; collapsed = false },
-            onAdd = importBooks,
-            collapsed = collapsed,
-            haze = haze,
-            modifier = Modifier.align(Alignment.BottomCenter),
-        )
+        val items = remember { Tab.entries.map { NavBarItem(it.label, it.icon, it.emoji) } }
+        val onSelect = { i: Int ->
+            if (Tab.entries[i] == Tab.Settings && tab == Tab.Settings) settingsPage = null
+            tab = Tab.entries[i]; collapsed = false
+        }
+        val emoji = data.settings.navIcons == 1
+        if (data.settings.navStyle == 1) {
+            ClassicNavBar(items, tab.ordinal, onSelect, collapsed, haze, emoji, Modifier.align(Alignment.BottomCenter))
+        } else {
+            FloatingNavBar(items, tab.ordinal, onSelect, collapsed, haze, emoji, Modifier.align(Alignment.BottomCenter))
+        }
     }
     if (showThemes) ThemeSheet(vm, onDismiss = { showThemes = false })
     if (showGenerate) GeneratePostsSheet(vm, onDismiss = { showGenerate = false })
@@ -184,9 +201,12 @@ private fun LibraryTab(vm: AppViewModel, nav: Nav, onImport: () -> Unit, onScrol
         verticalArrangement = Arrangement.spacedBy(22.dp),
     ) {
         item(span = { GridItemSpan(3) }) {
-            Column(Modifier.statusBarsPadding().padding(top = 48.dp)) {
+            Column(Modifier.statusBarsPadding().padding(top = 62.dp)) {
                 Text("Library", style = GType.largeTitle, color = g.text)
             }
+        }
+        item(span = { GridItemSpan(3) }) {
+            ReadingStatsCard(data.readingLog, data.books.sumOf { it.readingMs })
         }
         if (current != null) {
             item(span = { GridItemSpan(3) }) {
@@ -258,7 +278,7 @@ private fun ContinueCard(vm: AppViewModel, b: Book, onClick: () -> Unit) {
             Box(Modifier.fillMaxWidth().height(4.dp).clip(CircleShape).background(Color.White.copy(alpha = 0.25f))) {
                 Box(Modifier.fillMaxWidth(b.progress.coerceAtLeast(0.01f)).height(4.dp).background(Color.White))
             }
-            Text("${(b.progress * 100).toInt()}% · Tap to continue", color = Color.White.copy(alpha = 0.85f), fontSize = 12.sp, modifier = Modifier.padding(top = 6.dp))
+            Text("${(b.progress * 100).toInt()}%" + (if (b.readingMs > 60_000) " · ${formatDuration(b.readingMs)} read" else "") + " · Tap to continue", color = Color.White.copy(alpha = 0.85f), fontSize = 12.sp, modifier = Modifier.padding(top = 6.dp))
         }
     }
 }

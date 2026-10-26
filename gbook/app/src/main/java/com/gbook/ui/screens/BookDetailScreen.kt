@@ -103,6 +103,7 @@ fun BookDetailScreen(vm: AppViewModel, id: String, nav: Nav) {
                         if (book.pageCount > 0) add("${book.pageCount} pages")
                         if (book.chapterCount > 0) add("${book.chapterCount} chapters")
                         add("${(book.progress * 100).toInt()}% read")
+                        if (book.readingMs > 0) add(com.gbook.ui.components.formatDuration(book.readingMs) + " reading")
                     }.joinToString(" · ")
                     Text(meta, color = Color.White, fontSize = 15.sp, modifier = Modifier.padding(bottom = 14.dp))
                     PrimaryButton(

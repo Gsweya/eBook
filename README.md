@@ -1,15 +1,18 @@
 # GBook
 
-An Android eReader in Kotlin + Jetpack Compose for EPUB and PDF, with Instagram-style posts generated from your books and highlights.
+An open-source Android eReader for EPUB and PDF, built with Kotlin and Jetpack Compose. It turns your books and highlights into Instagram-style posts you can scroll through to remember what you read.
+
+**[Download the latest APK](https://github.com/Gsweya/eBook/releases/latest)** — open it on your phone and allow installing from your browser or file manager.
 
 ## Features
 
-- **Library** of EPUB and PDF books with covers, progress and reactions; add books with the **+** in the bottom bar.
-- **Reader** with nine open-licence reading fonts, text size buttons and pinch-to-resize, themes, line spacing and margins, contents and search.
+- **Library** of EPUB and PDF books with covers, progress and reactions; add books with the **+** button.
+- **Reading time**: today's minutes, a 7-day chart, streak and all-time totals, plus time spent in each book.
+- **Reader** with nine open-licence reading fonts, text size buttons and pinch-to-resize, page themes, line spacing and margins, contents and search.
 - **Highlights** across paragraphs with drag handles, a lens loupe, and a marker or underline style.
 - **Feed** of posts built on-device from chapter key ideas, recap carousels and your highlights.
 - **PDF** page view with zoom, plus a reflowed text mode split by the PDF outline.
-- **Themes**: accent palettes, light/dark/system mode and pure black.
+- **Make it yours**: accent palettes, light/dark/system mode, pure black, two bottom-bar styles, symbol or Noto 3D emoji icons, and a profile picture.
 - **Google Drive** backup, restore and import through the system file picker.
 
 ## Build
@@ -18,15 +21,35 @@ Requires JDK 21 and the Android SDK (compileSdk 36).
 
 ```sh
 cd gbook
-./gradlew installDebug
+./gradlew installDebug        # debug build on a connected phone
+./gradlew assembleRelease     # release APK in app/build/outputs/apk/release/
 ```
 
-To bundle sample books, put `.epub`/`.pdf` files in `sample_books/` (git-ignored); they are imported on first launch.
+Release signing uses a `gbook/keystore.properties` file (not committed) with `storeFile`, `storePassword`, `keyAlias` and `keyPassword`. Without it the release APK is built unsigned.
+
+Debug builds also bundle any `.epub`/`.pdf` files you put in `sample_books/` (git-ignored); they are imported on first launch.
+
+## Change how it looks
+
+Everything visual lives in a few files under `gbook/app/src/main/java/com/gbook/ui/`:
+
+| What | Where |
+|---|---|
+| Accent palettes, light/dark colours | `theme/Theme.kt` (`AccentPalettes`, `gColors`) |
+| Reading fonts and the app font | `theme/Fonts.kt`, font files in `res/font/` |
+| Buttons and surfaces | `components/Surfaces.kt` |
+| Bottom bars (pill and classic) | `components/NavBar.kt` |
+| Reader page themes | `theme/Theme.kt` (`ReaderThemes`) |
+| Post card styles | `screens/FeedScreen.kt` |
+
+Add a palette to `AccentPalettes` and it appears in **Settings → Appearance** automatically.
 
 ## Project layout
 
 - `gbook/` — the Android app (`com.gbook`)
-- `docs/spec.md`, `docs/spec-notes/` — design spec notes
+- `docs/spec.md`, `docs/spec-notes/` — design notes
 - `bookgram-monorepo-structure.md` — original idea document
 
-Fonts in `gbook/app/src/main/res/font` are licensed under the SIL Open Font License 1.1.
+## Licences
+
+GBook is released under the [MIT License](LICENSE). Bundled fonts are under the SIL Open Font License 1.1; the 3D icons are [Noto 3D Emoji](https://github.com/googlefonts/noto-emoji) under the Apache License 2.0.

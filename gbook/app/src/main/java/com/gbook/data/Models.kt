@@ -34,6 +34,8 @@ data class Book(
     /** For PDFs: whether reflowable text has been extracted into content.json. */
     val textReady: Boolean = true,
     val backedUpAt: Long = 0,
+    /** Total active reading time in this book. */
+    val readingMs: Long = 0,
 )
 
 @Serializable
@@ -104,6 +106,13 @@ data class ReaderSettings(
     val amoled: Boolean = false,
     /** Style for new highlights: 0 filled marker, 1 underline. */
     val highlightStyle: Int = 0,
+    /** Bottom bar: 0 floating pill, 1 classic capsule with a separate settings button. */
+    val navStyle: Int = 0,
+    /** Bottom bar icons: 0 standard symbols, 1 Noto 3D emoji. */
+    val navIcons: Int = 0,
+    val profileName: String = "",
+    /** Changes whenever the profile picture changes; 0 means none. */
+    val avatarVersion: Long = 0,
 )
 
 @Serializable
@@ -114,6 +123,8 @@ data class LibraryData(
     val settings: ReaderSettings = ReaderSettings(),
     val seeded: Boolean = false,
     val lastBackupAt: Long = 0,
+    /** Active reading time per local day ("yyyy-MM-dd"), across all books. */
+    val readingLog: Map<String, Long> = emptyMap(),
 )
 
 @Serializable

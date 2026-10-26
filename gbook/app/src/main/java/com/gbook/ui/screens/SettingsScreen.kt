@@ -1,6 +1,38 @@
 package com.gbook.ui.screens
 
 import android.text.format.DateUtils
+import androidx.activity.compose.BackHandler
+import androidx.activity.result.PickVisualMediaRequest
+import androidx.compose.animation.AnimatedContent
+import androidx.compose.animation.fadeIn
+import androidx.compose.animation.fadeOut
+import androidx.compose.animation.slideInHorizontally
+import androidx.compose.animation.slideOutHorizontally
+import androidx.compose.animation.togetherWith
+import androidx.compose.foundation.Image
+import androidx.compose.foundation.text.BasicTextField
+import androidx.compose.material.icons.automirrored.rounded.ArrowBack
+import androidx.compose.material.icons.automirrored.rounded.KeyboardArrowRight
+import androidx.compose.material.icons.automirrored.rounded.MenuBook
+import androidx.compose.material.icons.rounded.CheckCircle
+import androidx.compose.material.icons.rounded.Cloud
+import androidx.compose.material.icons.rounded.DynamicFeed
+import androidx.compose.material.icons.rounded.FormatQuote
+import androidx.compose.material.icons.rounded.Info
+import androidx.compose.material.icons.rounded.LocalLibrary
+import androidx.compose.material.icons.rounded.Palette
+import androidx.compose.material.icons.rounded.PhotoCamera
+import androidx.compose.material.icons.rounded.Settings
+import androidx.compose.material.icons.rounded.SpaceDashboard
+import androidx.compose.ui.graphics.SolidColor
+import androidx.compose.ui.res.painterResource
+import androidx.compose.ui.text.TextStyle
+import com.gbook.R
+import com.gbook.ui.components.Avatar
+import com.gbook.ui.components.IconCircle
+import com.gbook.ui.components.PillButton
+import com.gbook.ui.components.formatDuration
+import com.gbook.ui.theme.AppSans
 import androidx.activity.compose.rememberLauncherForActivityResult
 import androidx.activity.result.contract.ActivityResultContracts
 import androidx.compose.animation.animateColorAsState
@@ -65,103 +97,315 @@ import java.text.SimpleDateFormat
 import java.util.Date
 import java.util.Locale
 
+private class SettingsPage(val id: String, val title: String, val subtitle: String, val icon: ImageVector)
+
+private val Pages = listOf(
+    SettingsPage("appearance", "Appearance", "Mode, accent colour, pure black", Icons.Rounded.Palette),
+    SettingsPage("navigation", "Navigation bar", "Bar style and icon style", Icons.Rounded.SpaceDashboard),
+    SettingsPage("reading", "Reading", "Font, text size, highlights", Icons.AutoMirrored.Rounded.MenuBook),
+    SettingsPage("backup", "Google Drive & backup", "Back up, restore, import books", Icons.Rounded.Cloud),
+    SettingsPage("about", "About", "Version and credits", Icons.Rounded.Info),
+)
+
+/**
+ * Settings root: a profile card and a list of categories, each opening its own screen.
+ * [page] is the open sub-screen id ("profile" or one of [Pages]), or null for the root.
+ */
 @Composable
-fun SettingsTab(vm: AppViewModel, onScrollDir: (Boolean) -> Unit) {
+fun SettingsTab(vm: AppViewModel, page: String?, onPage: (String?) -> Unit, onScrollDir: (Boolean) -> Unit) {
+    BackHandler(page != null) { onPage(null) }
+    AnimatedContent(
+        page,
+        transitionSpec = {
+            val forward = targetState != null
+            (slideInHorizontally { if (forward) it / 3 else -it / 3 } + fadeIn()) togetherWith
+                (slideOutHorizontally { if (forward) -it / 3 else it / 3 } + fadeOut())
+        },
+        label = "settings",
+    ) { p ->
+        when (p) {
+            null -> SettingsRoot(vm, onPage, onScrollDir)
+            else -> SettingsSubPage(
+                title = if (p == "profile") "Profile" else Pages.first { it.id == p }.title,
+                onBack = { onPage(null) }, onScrollDir = onScrollDir,
+            ) {
+                when (p) {
+                    "profile" -> ProfilePage(vm)
+                    "appearance" -> AppearancePage(vm)
+                    "navigation" -> NavigationPage(vm)
+                    "reading" -> ReadingPage(vm)
+                    "backup" -> BackupPage(vm)
+                    else -> AboutPage(vm)
+                }
+            }
+        }
+    }
+}
+
+@Composable
+private fun SettingsRoot(vm: AppViewModel, onPage: (String?) -> Unit, onScrollDir: (Boolean) -> Unit) {
     val g = LocalG.current
-    val ctx = LocalContext.current
     val data by vm.data.collectAsState()
     val s = data.settings
     val list = rememberLazyListState()
     ScrollDirection(list.firstVisibleItemIndex, list.firstVisibleItemScrollOffset, onScrollDir)
-    val backup = rememberLauncherForActivityResult(ActivityResultContracts.CreateDocument("application/zip")) { it?.let(vm::backup) }
-    val restore = rememberLauncherForActivityResult(ActivityResultContracts.OpenDocument()) { it?.let(vm::restore) }
-    val importMany = rememberLauncherForActivityResult(ActivityResultContracts.OpenMultipleDocuments()) { uris -> uris.forEach { vm.import(it) } }
-    val version = remember(ctx) { runCatching { ctx.packageManager.getPackageInfo(ctx.packageName, 0).versionName }.getOrNull() ?: "" }
-
     LazyColumn(state = list, modifier = Modifier.fillMaxSize(), contentPadding = PaddingValues(bottom = 140.dp)) {
         item {
-            Column(Modifier.statusBarsPadding().padding(start = 20.dp, end = 20.dp, top = 48.dp, bottom = 4.dp)) {
+            Column(Modifier.statusBarsPadding().padding(start = 20.dp, end = 20.dp, top = 48.dp, bottom = 8.dp)) {
                 Text("Settings", style = GType.largeTitle, color = g.text)
             }
         }
         item {
-            SectionLabel("Appearance")
             SettingsCard {
-                AppearanceControls(s, vm)
-            }
-            SettingsCard {
-                Text("Accent", fontSize = 17.sp, color = g.text, modifier = Modifier.padding(start = 20.dp, top = 16.dp))
-                AccentPicker(s.accent) { id -> vm.updateSettings { it.copy(accent = id) } }
-            }
-        }
-        item {
-            SectionLabel("Reading")
-            Box(Modifier.padding(horizontal = 16.dp)) {
-                FontPicker(s.font) { id -> vm.updateSettings { it.copy(font = id) } }
-            }
-            SettingsCard {
-                Row(Modifier.fillMaxWidth().padding(horizontal = 20.dp, vertical = 12.dp), verticalAlignment = Alignment.CenterVertically) {
-                    Text("Text size", fontSize = 17.sp, color = g.text, modifier = Modifier.weight(1f))
-                    Segmented(listOf("A−", "${s.fontSize.toInt()}", "A+"), selected = 1, onSelect = { i ->
-                        val d = if (i == 0) -1f else if (i == 2) 1f else 0f
-                        vm.updateSettings { it.copy(fontSize = (it.fontSize + d).coerceIn(MIN_FONT, MAX_FONT)) }
-                    }, highlightSelected = false)
-                }
-                HorizontalDivider(Modifier.padding(start = 20.dp), color = g.separator)
-                Row(Modifier.fillMaxWidth().padding(horizontal = 20.dp, vertical = 12.dp), verticalAlignment = Alignment.CenterVertically) {
+                Row(
+                    Modifier.fillMaxWidth().clickable { onPage("profile") }.padding(16.dp),
+                    verticalAlignment = Alignment.CenterVertically,
+                ) {
+                    Avatar(vm.avatarFile, s.avatarVersion, s.profileName, 60.dp)
+                    Spacer(Modifier.width(16.dp))
                     Column(Modifier.weight(1f)) {
-                        Text("Highlight style", fontSize = 17.sp, color = g.text)
-                        HighlightPreview(s.highlightStyle)
+                        Text(s.profileName.ifBlank { "Your profile" }, fontSize = 20.sp, fontWeight = FontWeight.SemiBold, color = g.text)
+                        Text("Name and profile picture", fontSize = 14.sp, color = g.text2)
                     }
-                    Segmented(listOf("Marker", "Underline"), s.highlightStyle, { i -> vm.updateSettings { it.copy(highlightStyle = i) } })
-                }
-                HorizontalDivider(Modifier.padding(start = 20.dp), color = g.separator)
-                OptionRow("Post every new highlight", "Highlights appear in your Feed straight away", s.autoPostHighlights) { on ->
-                    vm.updateSettings { it.copy(autoPostHighlights = on) }
+                    Icon(Icons.AutoMirrored.Rounded.KeyboardArrowRight, null, tint = g.text2)
                 }
             }
         }
         item {
-            SectionLabel("Google Drive")
-            Text(
-                "When the file picker opens, choose Drive from the menu (☰) and pick a folder.",
-                style = GType.caption, color = g.text2, modifier = Modifier.padding(start = 36.dp, end = 36.dp, bottom = 4.dp),
-            )
+            Spacer(Modifier.height(10.dp))
             SettingsCard {
-                SyncRow(
-                    Icons.Rounded.CloudUpload, "Back up library",
-                    if (data.lastBackupAt > 0) "Last backup " + DateUtils.getRelativeTimeSpanString(data.lastBackupAt) else "Books, highlights and posts in one file",
-                ) { backup.launch("GBook-backup-" + SimpleDateFormat("yyyy-MM-dd", Locale.US).format(Date()) + ".zip") }
-                HorizontalDivider(Modifier.padding(start = 62.dp), color = g.separator)
-                SyncRow(Icons.Rounded.CloudDownload, "Restore from a backup", "Merges into this library — nothing is deleted") {
-                    restore.launch(arrayOf("application/zip", "application/octet-stream"))
-                }
-                HorizontalDivider(Modifier.padding(start = 62.dp), color = g.separator)
-                SyncRow(Icons.Rounded.FileOpen, "Import books", "EPUB and PDF, several at once") {
-                    importMany.launch(arrayOf("application/epub+zip", "application/pdf"))
+                Pages.forEachIndexed { i, p ->
+                    if (i > 0) HorizontalDivider(Modifier.padding(start = 66.dp), color = g.separator)
+                    Row(
+                        Modifier.fillMaxWidth().clickable { onPage(p.id) }.padding(horizontal = 16.dp, vertical = 13.dp),
+                        verticalAlignment = Alignment.CenterVertically,
+                    ) {
+                        Box(
+                            Modifier.size(36.dp).clip(RoundedCornerShape(11.dp)).background(g.accent.copy(alpha = 0.15f)),
+                            contentAlignment = Alignment.Center,
+                        ) { Icon(p.icon, null, tint = g.accent, modifier = Modifier.size(20.dp)) }
+                        Spacer(Modifier.width(14.dp))
+                        Column(Modifier.weight(1f)) {
+                            Text(p.title, fontSize = 17.sp, color = g.text)
+                            Text(p.subtitle, fontSize = 13.sp, color = g.text2)
+                        }
+                        Icon(Icons.AutoMirrored.Rounded.KeyboardArrowRight, null, tint = g.text2)
+                    }
                 }
             }
         }
-        item {
-            SectionLabel("About")
-            SettingsCard {
-                Row(Modifier.fillMaxWidth().padding(horizontal = 20.dp, vertical = 14.dp)) {
-                    Text("GBook", fontSize = 17.sp, color = g.text, modifier = Modifier.weight(1f))
-                    Text(version, fontSize = 17.sp, color = g.text2)
-                }
-                HorizontalDivider(Modifier.padding(start = 20.dp), color = g.separator)
-                Text(
-                    "${data.books.size} books · ${data.highlights.size} highlights · ${data.posts.size} posts",
-                    fontSize = 15.sp, color = g.text2, modifier = Modifier.padding(horizontal = 20.dp, vertical = 14.dp),
-                )
-            }
-            Text(
-                "Reading fonts: Literata, Charis SIL, Source Serif, Newsreader, Gelasio, Crimson Pro, EB Garamond, Inter and DM Sans — SIL Open Font License.",
-                style = GType.caption, color = g.text2, textAlign = TextAlign.Center,
-                modifier = Modifier.fillMaxWidth().padding(horizontal = 36.dp, vertical = 8.dp),
+    }
+}
+
+@Composable
+private fun SettingsSubPage(title: String, onBack: () -> Unit, onScrollDir: (Boolean) -> Unit, content: @Composable ColumnScope.() -> Unit) {
+    val g = LocalG.current
+    val scroll = rememberScrollState()
+    ScrollDirection(0, scroll.value, onScrollDir)
+    Column(Modifier.fillMaxSize().verticalScroll(scroll).padding(bottom = 140.dp)) {
+        Row(Modifier.statusBarsPadding().padding(start = 12.dp, end = 20.dp, top = 6.dp), verticalAlignment = Alignment.CenterVertically) {
+            IconCircle(Icons.AutoMirrored.Rounded.ArrowBack, "Back", onBack, size = 44.dp)
+        }
+        Text(title, style = GType.largeTitle, color = g.text, modifier = Modifier.padding(start = 20.dp, top = 10.dp, bottom = 10.dp))
+        content()
+    }
+}
+
+@Composable
+private fun ProfilePage(vm: AppViewModel) {
+    val g = LocalG.current
+    val data by vm.data.collectAsState()
+    val s = data.settings
+    val pick = rememberLauncherForActivityResult(ActivityResultContracts.PickVisualMedia()) { uri -> uri?.let(vm::setAvatar) }
+    val choose = { pick.launch(PickVisualMediaRequest(ActivityResultContracts.PickVisualMedia.ImageOnly)) }
+    Column(Modifier.fillMaxWidth().padding(top = 8.dp), horizontalAlignment = Alignment.CenterHorizontally) {
+        Box(contentAlignment = Alignment.BottomEnd) {
+            Avatar(vm.avatarFile, s.avatarVersion, s.profileName, 120.dp, Modifier.clip(CircleShape).clickable(onClick = choose))
+            Box(
+                Modifier.size(36.dp).clip(CircleShape).background(g.accent).border(3.dp, g.bg, CircleShape).clickable(onClick = choose),
+                contentAlignment = Alignment.Center,
+            ) { Icon(Icons.Rounded.PhotoCamera, "Choose photo", tint = g.onAccent, modifier = Modifier.size(18.dp)) }
+        }
+        Row(Modifier.padding(top = 16.dp), horizontalArrangement = Arrangement.spacedBy(10.dp)) {
+            PillButton(if (s.avatarVersion == 0L) "Add photo" else "Change photo", choose, height = 44.dp)
+            if (s.avatarVersion != 0L) PillButton("Remove", vm::removeAvatar, height = 44.dp, contentColor = g.destructive)
+        }
+    }
+    SectionLabel("Name")
+    SettingsCard {
+        Box(Modifier.fillMaxWidth().padding(horizontal = 20.dp, vertical = 16.dp)) {
+            if (s.profileName.isEmpty()) Text("Your name", fontSize = 17.sp, color = g.text2)
+            BasicTextField(
+                s.profileName, { name -> vm.updateSettings { it.copy(profileName = name.take(40)) } },
+                singleLine = true, textStyle = TextStyle(color = g.text, fontSize = 17.sp, fontFamily = AppSans),
+                cursorBrush = SolidColor(g.accent), modifier = Modifier.fillMaxWidth(),
             )
         }
     }
+    Text(
+        "Your name and photo stay on this device.",
+        style = GType.caption, color = g.text2, modifier = Modifier.padding(horizontal = 36.dp, vertical = 6.dp),
+    )
+}
+
+@Composable
+private fun AppearancePage(vm: AppViewModel) {
+    val g = LocalG.current
+    val s = vm.data.collectAsState().value.settings
+    SectionLabel("Mode")
+    SettingsCard { AppearanceControls(s, vm) }
+    SectionLabel("Accent colour")
+    SettingsCard { AccentPicker(s.accent) { id -> vm.updateSettings { it.copy(accent = id) } } }
+    Text(
+        "The accent tints buttons, the selected tab and, in dark mode, the background.",
+        style = GType.caption, color = g.text2, modifier = Modifier.padding(horizontal = 36.dp, vertical = 6.dp),
+    )
+}
+
+@Composable
+private fun NavigationPage(vm: AppViewModel) {
+    val g = LocalG.current
+    val s = vm.data.collectAsState().value.settings
+    SectionLabel("Bar style")
+    Row(Modifier.padding(horizontal = 16.dp), horizontalArrangement = Arrangement.spacedBy(12.dp)) {
+        NavStyleCard("Pill", "Floating, springy tabs", s.navStyle == 0, Modifier.weight(1f), { vm.updateSettings { it.copy(navStyle = 0) } }) {
+            Box(Modifier.fillMaxWidth().height(26.dp).clip(CircleShape).background(g.fill)) {
+                Box(Modifier.fillMaxWidth(0.25f).fillMaxHeight().padding(3.dp).clip(CircleShape).background(g.accent.copy(alpha = 0.35f)))
+            }
+        }
+        NavStyleCard("Classic", "Capsule + settings button", s.navStyle == 1, Modifier.weight(1f), { vm.updateSettings { it.copy(navStyle = 1) } }) {
+            Row(verticalAlignment = Alignment.CenterVertically) {
+                Box(Modifier.weight(1f).height(26.dp).clip(CircleShape).background(g.fill))
+                Spacer(Modifier.width(8.dp))
+                Box(Modifier.size(26.dp).clip(CircleShape).background(g.fill))
+            }
+        }
+    }
+    SectionLabel("Icons")
+    SettingsCard {
+        Row(Modifier.fillMaxWidth().padding(horizontal = 20.dp, vertical = 12.dp), verticalAlignment = Alignment.CenterVertically) {
+            Text("Icon style", fontSize = 17.sp, color = g.text, modifier = Modifier.weight(1f))
+            Segmented(listOf("Symbols", "3D emoji"), s.navIcons, { i -> vm.updateSettings { it.copy(navIcons = i) } })
+        }
+        HorizontalDivider(Modifier.padding(start = 20.dp), color = g.separator)
+        Row(Modifier.fillMaxWidth().padding(vertical = 16.dp), horizontalArrangement = Arrangement.SpaceEvenly) {
+            if (s.navIcons == 1) {
+                listOf(R.drawable.noto3d_library, R.drawable.noto3d_feed, R.drawable.noto3d_highlights, R.drawable.noto3d_settings).forEach {
+                    Image(painterResource(it), null, Modifier.size(40.dp))
+                }
+            } else {
+                listOf(Icons.Rounded.LocalLibrary, Icons.Rounded.DynamicFeed, Icons.Rounded.FormatQuote, Icons.Rounded.Settings).forEach {
+                    Icon(it, null, tint = g.text2, modifier = Modifier.size(34.dp))
+                }
+            }
+        }
+    }
+    Text(
+        "3D emoji are Google's Noto 3D Emoji (Apache License 2.0).",
+        style = GType.caption, color = g.text2, modifier = Modifier.padding(horizontal = 36.dp, vertical = 6.dp),
+    )
+}
+
+@Composable
+private fun NavStyleCard(title: String, subtitle: String, selected: Boolean, modifier: Modifier, onClick: () -> Unit, preview: @Composable () -> Unit) {
+    val g = LocalG.current
+    Column(
+        modifier.clip(RoundedCornerShape(22.dp)).background(g.surface)
+            .border(if (selected) 2.dp else 0.75.dp, if (selected) g.accent else g.separator, RoundedCornerShape(22.dp))
+            .clickable(onClick = onClick).padding(16.dp),
+    ) {
+        preview()
+        Spacer(Modifier.height(14.dp))
+        Row(verticalAlignment = Alignment.CenterVertically) {
+            Text(title, fontSize = 16.sp, fontWeight = FontWeight.SemiBold, color = g.text, modifier = Modifier.weight(1f))
+            if (selected) Icon(Icons.Rounded.CheckCircle, "Selected", tint = g.accent, modifier = Modifier.size(20.dp))
+        }
+        Text(subtitle, fontSize = 13.sp, color = g.text2)
+    }
+}
+
+@Composable
+private fun ReadingPage(vm: AppViewModel) {
+    val g = LocalG.current
+    val s = vm.data.collectAsState().value.settings
+    SectionLabel("Text")
+    Box(Modifier.padding(horizontal = 16.dp)) {
+        FontPicker(s.font) { id -> vm.updateSettings { it.copy(font = id) } }
+    }
+    SettingsCard {
+        Row(Modifier.fillMaxWidth().padding(horizontal = 20.dp, vertical = 12.dp), verticalAlignment = Alignment.CenterVertically) {
+            Text("Text size", fontSize = 17.sp, color = g.text, modifier = Modifier.weight(1f))
+            Segmented(listOf("A−", "${s.fontSize.toInt()}", "A+"), selected = 1, onSelect = { i ->
+                val d = if (i == 0) -1f else if (i == 2) 1f else 0f
+                vm.updateSettings { it.copy(fontSize = (it.fontSize + d).coerceIn(MIN_FONT, MAX_FONT)) }
+            }, highlightSelected = false)
+        }
+    }
+    SectionLabel("Highlights")
+    SettingsCard {
+        Row(Modifier.fillMaxWidth().padding(horizontal = 20.dp, vertical = 12.dp), verticalAlignment = Alignment.CenterVertically) {
+            Column(Modifier.weight(1f)) {
+                Text("Style", fontSize = 17.sp, color = g.text)
+                HighlightPreview(s.highlightStyle)
+            }
+            Segmented(listOf("Marker", "Underline"), s.highlightStyle, { i -> vm.updateSettings { it.copy(highlightStyle = i) } })
+        }
+        HorizontalDivider(Modifier.padding(start = 20.dp), color = g.separator)
+        OptionRow("Post every new highlight", "Highlights appear in your Feed straight away", s.autoPostHighlights) { on ->
+            vm.updateSettings { it.copy(autoPostHighlights = on) }
+        }
+    }
+}
+
+@Composable
+private fun BackupPage(vm: AppViewModel) {
+    val g = LocalG.current
+    val data by vm.data.collectAsState()
+    val backup = rememberLauncherForActivityResult(ActivityResultContracts.CreateDocument("application/zip")) { it?.let(vm::backup) }
+    val restore = rememberLauncherForActivityResult(ActivityResultContracts.OpenDocument()) { it?.let(vm::restore) }
+    val importMany = rememberLauncherForActivityResult(ActivityResultContracts.OpenMultipleDocuments()) { uris -> uris.forEach { vm.import(it) } }
+    Text(
+        "When the file picker opens, choose Drive from the menu (☰) and pick a folder.",
+        style = GType.secondary, color = g.text2, modifier = Modifier.padding(start = 20.dp, end = 20.dp, bottom = 8.dp),
+    )
+    SettingsCard {
+        SyncRow(
+            Icons.Rounded.CloudUpload, "Back up library",
+            if (data.lastBackupAt > 0) "Last backup " + DateUtils.getRelativeTimeSpanString(data.lastBackupAt) else "Books, highlights and posts in one file",
+        ) { backup.launch("GBook-backup-" + SimpleDateFormat("yyyy-MM-dd", Locale.US).format(Date()) + ".zip") }
+        HorizontalDivider(Modifier.padding(start = 62.dp), color = g.separator)
+        SyncRow(Icons.Rounded.CloudDownload, "Restore from a backup", "Merges into this library — nothing is deleted") {
+            restore.launch(arrayOf("application/zip", "application/octet-stream"))
+        }
+        HorizontalDivider(Modifier.padding(start = 62.dp), color = g.separator)
+        SyncRow(Icons.Rounded.FileOpen, "Import books", "EPUB and PDF, several at once") {
+            importMany.launch(arrayOf("application/epub+zip", "application/pdf"))
+        }
+    }
+}
+
+@Composable
+private fun AboutPage(vm: AppViewModel) {
+    val g = LocalG.current
+    val ctx = LocalContext.current
+    val data by vm.data.collectAsState()
+    val version = remember(ctx) { runCatching { ctx.packageManager.getPackageInfo(ctx.packageName, 0).versionName }.getOrNull() ?: "" }
+    SettingsCard {
+        Row(Modifier.fillMaxWidth().padding(horizontal = 20.dp, vertical = 14.dp)) {
+            Text("GBook", fontSize = 17.sp, color = g.text, modifier = Modifier.weight(1f))
+            Text(version, fontSize = 17.sp, color = g.text2)
+        }
+        HorizontalDivider(Modifier.padding(start = 20.dp), color = g.separator)
+        Text(
+            "${data.books.size} books · ${data.highlights.size} highlights · ${data.posts.size} posts · ${formatDuration(data.books.sumOf { it.readingMs })} read",
+            fontSize = 15.sp, color = g.text2, modifier = Modifier.padding(horizontal = 20.dp, vertical = 14.dp),
+        )
+    }
+    Text(
+        "GBook is open source (MIT). Reading fonts: Literata, Charis SIL, Source Serif, Newsreader, Gelasio, Crimson Pro, EB Garamond, Inter and DM Sans — SIL Open Font License. 3D icons: Noto 3D Emoji — Apache License 2.0.",
+        style = GType.caption, color = g.text2,
+        modifier = Modifier.fillMaxWidth().padding(horizontal = 36.dp, vertical = 10.dp),
+    )
 }
 
 /** Quick theme switcher opened from the Library's palette button. */

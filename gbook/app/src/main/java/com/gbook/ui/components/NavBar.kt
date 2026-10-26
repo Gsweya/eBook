@@ -1,6 +1,9 @@
 package com.gbook.ui.components
 
+import androidx.annotation.DrawableRes
 import androidx.compose.animation.animateColorAsState
+import androidx.compose.animation.animateContentSize
+import androidx.compose.foundation.Image
 import androidx.compose.animation.core.Animatable
 import androidx.compose.animation.core.CubicBezierEasing
 import androidx.compose.animation.core.animateFloatAsState
@@ -47,6 +50,11 @@ import androidx.compose.ui.geometry.Offset
 import androidx.compose.ui.geometry.Size
 import androidx.compose.ui.graphics.Brush
 import androidx.compose.ui.graphics.Color
+import androidx.compose.ui.graphics.ColorFilter
+import androidx.compose.ui.graphics.ColorMatrix
+import androidx.compose.ui.graphics.Shape
+import androidx.compose.ui.res.painterResource
+import androidx.compose.ui.unit.Dp
 import androidx.compose.ui.graphics.graphicsLayer
 import androidx.compose.ui.graphics.vector.ImageVector
 import androidx.compose.ui.input.pointer.pointerInput
@@ -64,32 +72,35 @@ import kotlinx.coroutines.launch
 import kotlin.math.abs
 import kotlin.math.roundToInt
 
-class NavBarItem(val label: String, val icon: ImageVector)
+/** A bottom-bar tab: a symbol [icon] and a Noto 3D emoji drawable [emoji] for the 3D icon style. */
+class NavBarItem(val label: String, val icon: ImageVector, @DrawableRes val emoji: Int)
 
 private val Standard = CubicBezierEasing(0.2f, 0f, 0f, 1f)
 
 /**
  * Floating pill navigation bar (after Nuvio): a blurred dark capsule whose selected tab sits in an accent-tinted
  * pill that springs between tabs, stretching while it moves. The pill can be dragged across tabs. Labels fold
- * away while content scrolls down ([collapsed]). An accent "+" sits in the middle slot for adding books.
+ * away while content scrolls down ([collapsed]). With [onAdd], an accent "+" sits in the middle slot.
  */
 @Composable
 fun FloatingNavBar(
     items: List<NavBarItem>,
     selected: Int,
     onSelect: (Int) -> Unit,
-    onAdd: () -> Unit,
     collapsed: Boolean,
     haze: HazeState?,
+    emojiIcons: Boolean,
     modifier: Modifier = Modifier,
+    onAdd: (() -> Unit)? = null,
 ) {
     val g = LocalG.current
     val haptics = rememberHaptics()
     val scope = rememberCoroutineScope()
-    val mid = items.size / 2
-    val slots = items.size + 1
-    fun slotOf(tab: Int) = if (tab < mid) tab else tab + 1
-    fun tabOf(slot: Int) = when { slot < mid -> slot; slot == mid -> null; else -> slot - 1 }
+    // Index of the add-button slot, or -1 when there is none.
+    val mid = if (onAdd != null) items.size / 2 else -1
+    val slots = items.size + if (onAdd != null) 1 else 0
+    fun slotOf(tab: Int) = if (mid < 0 || tab < mid) tab else tab + 1
+    fun tabOf(slot: Int) = when { mid < 0 || slot < mid -> slot; slot == mid -> null; else -> slot - 1 }
 
     val labels by animateFloatAsState(if (collapsed) 0f else 1f, tween(300, easing = Standard), label = "labels")
     val pos = remember { Animatable(slotOf(selected).toFloat()) }
@@ -143,7 +154,7 @@ fun FloatingNavBar(
                         onDragEnd = {
                             var slot = dragPos.roundToInt()
                             // The add button is not a tab: settle on the nearer neighbour.
-                            if (slot == mid) slot = if (dragPos < mid) mid - 1 else mid + 1
+                            if (mid >= 0 && slot == mid) slot = if (dragPos < mid) mid - 1 else mid + 1
                             val tab = tabOf(slot) ?: current
                             scope.launch {
                                 pos.snapTo(dragPos)
@@ -185,7 +196,7 @@ fun FloatingNavBar(
                 for (slot in 0 until slots) {
                     val tab = tabOf(slot)
                     Box(Modifier.weight(1f).fillMaxHeight(), contentAlignment = Alignment.Center) {
-                        if (tab == null) {
+                        if (tab == null && onAdd != null) {
                             Box(
                                 Modifier.size(40.dp + 4.dp * labels)
                                     .shadow(8.dp, CircleShape, ambientColor = g.accent, spotColor = g.accent)
@@ -193,8 +204,8 @@ fun FloatingNavBar(
                                     .clickable(role = Role.Button) { haptics.tap(); onAdd() },
                                 contentAlignment = Alignment.Center,
                             ) { Icon(Icons.Rounded.Add, "Add a book", tint = g.onAccent, modifier = Modifier.size(26.dp)) }
-                        } else {
-                            NavTab(items[tab], active = slot == activeSlot, labels = labels, scale = if (slot == activeSlot) 1f + 0.12f * press else 1f) {
+                        } else if (tab != null) {
+                            NavTab(items[tab], active = slot == activeSlot, labels = labels, emojiIcons = emojiIcons, scale = if (slot == activeSlot) 1f + 0.12f * press else 1f) {
                                 haptics.tap(); onSelect(tab)
                             }
                         }
@@ -206,7 +217,7 @@ fun FloatingNavBar(
 }
 
 @Composable
-private fun NavTab(item: NavBarItem, active: Boolean, labels: Float, scale: Float, onClick: () -> Unit) {
+private fun NavTab(item: NavBarItem, active: Boolean, labels: Float, emojiIcons: Boolean, scale: Float, onClick: () -> Unit) {
     val g = LocalG.current
     val color by animateColorAsState(if (active) g.accent else g.text2, label = "tab")
     Column(
@@ -215,11 +226,7 @@ private fun NavTab(item: NavBarItem, active: Boolean, labels: Float, scale: Floa
         horizontalAlignment = Alignment.CenterHorizontally,
         verticalArrangement = androidx.compose.foundation.layout.Arrangement.Center,
     ) {
-        Icon(
-            item.icon, item.label,
-            tint = if (active) Color.White else color,
-            modifier = Modifier.size(24.dp + 2.dp * labels).then(if (active) Modifier.gradientMask(g.accentBrush) else Modifier),
-        )
+        NavIcon(item, active, emojiIcons, 24.dp + 2.dp * labels, color, gradient = true)
         Box(Modifier.height(15.dp * labels).fillMaxWidth().clipToBounds().alpha(labels)) {
             Text(
                 item.label, color = color, fontSize = 11.sp, lineHeight = 14.sp,
@@ -229,4 +236,96 @@ private fun NavTab(item: NavBarItem, active: Boolean, labels: Float, scale: Floa
             )
         }
     }
+}
+
+/** Symbol icon (accent-gradient when active) or Noto 3D emoji (desaturated when inactive). */
+@Composable
+private fun NavIcon(item: NavBarItem, active: Boolean, emojiIcons: Boolean, size: Dp, color: Color, gradient: Boolean) {
+    val g = LocalG.current
+    if (emojiIcons) {
+        Image(
+            painterResource(item.emoji), item.label,
+            colorFilter = if (active) null else Desaturate,
+            modifier = Modifier.size(size + 4.dp).alpha(if (active) 1f else 0.7f)
+                .graphicsLayer { val s = if (active) 1.08f else 1f; scaleX = s; scaleY = s },
+        )
+    } else {
+        Icon(
+            item.icon, item.label,
+            tint = if (active && gradient) Color.White else color,
+            modifier = Modifier.size(size).then(if (active && gradient) Modifier.gradientMask(g.accentBrush) else Modifier),
+        )
+    }
+}
+
+private val Desaturate = ColorFilter.colorMatrix(ColorMatrix().apply { setToSaturation(0.2f) })
+
+/**
+ * The original iOS 26-style bar: a frosted capsule holding every tab but the last, plus a separate round button
+ * for the last tab (Settings). While content scrolls down the capsule shrinks to just the selected tab.
+ */
+@Composable
+fun ClassicNavBar(
+    items: List<NavBarItem>,
+    selected: Int,
+    onSelect: (Int) -> Unit,
+    collapsed: Boolean,
+    haze: HazeState?,
+    emojiIcons: Boolean,
+    modifier: Modifier = Modifier,
+) {
+    val g = LocalG.current
+    val haptics = rememberHaptics()
+    val main = items.dropLast(1)
+    val lastIndex = items.lastIndex
+    Row(
+        modifier.navigationBarsPadding().padding(bottom = 8.dp, start = 20.dp, end = 20.dp).fillMaxWidth(),
+        verticalAlignment = Alignment.CenterVertically,
+    ) {
+        Row(
+            Modifier.animateContentSize().height(62.dp).frosted(CircleShape, haze).padding(4.dp),
+            verticalAlignment = Alignment.CenterVertically,
+        ) {
+            val shown = if (collapsed && selected < main.size) listOf(selected) else main.indices.toList()
+            shown.forEach { i ->
+                val on = i == selected
+                Column(
+                    Modifier.height(54.dp).clip(CircleShape)
+                        .background(if (on && !collapsed) g.text.copy(alpha = 0.08f) else Color.Transparent)
+                        .clickable { haptics.tap(); onSelect(i) }
+                        .padding(horizontal = if (collapsed) 14.dp else 18.dp),
+                    horizontalAlignment = Alignment.CenterHorizontally,
+                    verticalArrangement = androidx.compose.foundation.layout.Arrangement.Center,
+                ) {
+                    NavIcon(items[i], on, emojiIcons, 24.dp, if (on) g.accent else g.text, gradient = false)
+                    if (!collapsed) Text(items[i].label, fontSize = 11.sp, fontWeight = FontWeight.Medium, color = if (on) g.accent else g.text)
+                }
+            }
+        }
+        androidx.compose.foundation.layout.Spacer(Modifier.weight(1f))
+        val on = selected == lastIndex
+        Box(
+            Modifier.size(62.dp).frosted(CircleShape, haze).clickable { haptics.tap(); onSelect(lastIndex) },
+            contentAlignment = Alignment.Center,
+        ) { NavIcon(items[lastIndex], on, emojiIcons, 28.dp, if (on) g.accent else g.text, gradient = false) }
+    }
+}
+
+/** Frosted glass used by the classic bar: backdrop blur, translucent tint and a light hairline. */
+@Composable
+private fun Modifier.frosted(shape: Shape, haze: HazeState?): Modifier {
+    val g = LocalG.current
+    val tint = if (g.dark) Color(0xFF1C1C1E).copy(alpha = 0.55f) else Color.White.copy(alpha = 0.55f)
+    return this
+        .shadow(10.dp, shape, ambientColor = Color.Black.copy(alpha = 0.10f), spotColor = Color.Black.copy(alpha = 0.16f))
+        .clip(shape)
+        .then(
+            if (haze != null) Modifier.hazeEffect(haze) {
+                blurRadius = 24.dp
+                noiseFactor = 0f
+                tints = listOf(HazeTint(tint))
+                backgroundColor = g.bg
+            } else Modifier.background(g.chrome),
+        )
+        .border(0.7.dp, if (g.dark) Color.White.copy(alpha = 0.12f) else Color.White.copy(alpha = 0.75f), shape)
 }

@@ -74,18 +74,18 @@ fun ReadingActivitySheet(vm: AppViewModel, onOpen: (Book) -> Unit, onDismiss: ()
                     if (days > 0) append("about ${formatDuration(total / days)} a day · ")
                     append(if (ranked.size == 1) "1 book" else "${ranked.size} books")
                 },
-                fontSize = 15.sp, color = g.text2, modifier = Modifier.padding(start = 20.dp),
+                fontSize = 16.sp, color = g.text2, modifier = Modifier.padding(start = 20.dp),
             )
             if (days > 0) DayBars(dates, dates.map { data.readingLog[it.toString()] ?: 0L })
 
             Text(
-                "MOST READ", fontSize = 13.sp, fontWeight = FontWeight.SemiBold, letterSpacing = 1.5.sp, color = g.text2,
+                "MOST READ", fontSize = 14.sp, fontWeight = FontWeight.SemiBold, letterSpacing = 1.5.sp, color = g.text2,
                 modifier = Modifier.padding(start = 20.dp, top = 24.dp, bottom = 6.dp),
             )
             if (ranked.isEmpty()) {
                 Text(
                     "Open a book and start reading — the books you spend the most time with will show up here.",
-                    fontSize = 15.sp, color = g.text2, modifier = Modifier.padding(horizontal = 20.dp, vertical = 8.dp),
+                    fontSize = 16.sp, color = g.text2, modifier = Modifier.padding(horizontal = 20.dp, vertical = 8.dp),
                 )
             }
             val top = ranked.firstOrNull()?.second ?: 1L
@@ -102,12 +102,12 @@ fun ReadingActivitySheet(vm: AppViewModel, onOpen: (Book) -> Unit, onDismiss: ()
                     Spacer(Modifier.width(14.dp))
                     Column(Modifier.weight(1f)) {
                         Text(book.title, fontSize = 16.sp, fontWeight = FontWeight.SemiBold, color = g.text, maxLines = 1, overflow = TextOverflow.Ellipsis)
-                        Text(book.author, fontSize = 13.sp, color = g.text2, maxLines = 1, overflow = TextOverflow.Ellipsis)
+                        Text(book.author, fontSize = 14.sp, color = g.text2, maxLines = 1, overflow = TextOverflow.Ellipsis)
                         Box(Modifier.padding(top = 8.dp).fillMaxWidth().height(6.dp).clip(CircleShape).background(g.fill)) {
                             Box(Modifier.fillMaxWidth((ms.toFloat() / top).coerceIn(0.03f, 1f)).fillMaxHeight().clip(CircleShape).background(g.accentBrush))
                         }
                     }
-                    Text(formatDuration(ms), fontSize = 15.sp, fontWeight = FontWeight.SemiBold, color = g.text, modifier = Modifier.padding(start = 14.dp))
+                    Text(formatDuration(ms), fontSize = 16.sp, fontWeight = FontWeight.SemiBold, color = g.text, modifier = Modifier.padding(start = 14.dp))
                 }
             }
         }
@@ -137,7 +137,7 @@ private fun DayBars(dates: List<LocalDate>, values: List<Long>) {
             Row(Modifier.fillMaxWidth().padding(top = 6.dp), horizontalArrangement = Arrangement.spacedBy(10.dp)) {
                 dates.forEachIndexed { i, d ->
                     Text(
-                        d.dayOfWeek.getDisplayName(TextStyle.SHORT, Locale.getDefault()), fontSize = 11.sp,
+                        d.dayOfWeek.getDisplayName(TextStyle.SHORT, Locale.getDefault()), fontSize = 12.sp,
                         color = if (i == dates.lastIndex) g.text else g.text2, modifier = Modifier.weight(1f),
                         textAlign = androidx.compose.ui.text.style.TextAlign.Center,
                     )
@@ -146,8 +146,8 @@ private fun DayBars(dates: List<LocalDate>, values: List<Long>) {
         } else {
             val fmt = DateTimeFormatter.ofPattern("d MMM", Locale.getDefault())
             Row(Modifier.fillMaxWidth().padding(top = 6.dp)) {
-                Text(dates.first().format(fmt), fontSize = 11.sp, color = g.text2, modifier = Modifier.weight(1f))
-                Text("Today", fontSize = 11.sp, color = g.text)
+                Text(dates.first().format(fmt), fontSize = 12.sp, color = g.text2, modifier = Modifier.weight(1f))
+                Text("Today", fontSize = 12.sp, color = g.text)
             }
         }
     }

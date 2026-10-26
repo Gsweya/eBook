@@ -136,7 +136,7 @@ private fun CropArea(bmp: Bitmap, onCancel: () -> Unit, onDone: (Bitmap) -> Unit
         }
         Column(Modifier.fillMaxWidth().statusBarsPadding().padding(top = 24.dp), horizontalAlignment = Alignment.CenterHorizontally) {
             Text("Move and scale", color = Color.White, fontSize = 20.sp, fontWeight = FontWeight.SemiBold)
-            Text("Pinch to zoom, drag to fit your face in the circle", color = Color.White.copy(alpha = 0.7f), fontSize = 14.sp, modifier = Modifier.padding(top = 4.dp))
+            Text("Pinch to zoom, drag to fit your face in the circle", color = Color.White.copy(alpha = 0.7f), fontSize = 15.sp, modifier = Modifier.padding(top = 4.dp))
         }
         Column(Modifier.align(Alignment.BottomCenter).fillMaxWidth().navigationBarsPadding().padding(horizontal = 24.dp, vertical = 20.dp)) {
             GSlider(zoom, 1f..MAX_ZOOM, { z -> off = clamp(off * (z / zoom), z); zoom = z }, Modifier.fillMaxWidth().padding(bottom = 16.dp))

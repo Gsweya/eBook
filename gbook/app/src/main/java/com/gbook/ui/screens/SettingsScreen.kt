@@ -1,5 +1,6 @@
 package com.gbook.ui.screens
 
+import com.gbook.ui.components.plural
 import com.gbook.ui.components.bottomBarClearance
 import androidx.compose.foundation.Image
 import androidx.compose.ui.graphics.ColorFilter
@@ -250,9 +251,9 @@ private fun SettingsNavRow(leading: @Composable () -> Unit, title: String, subti
         Spacer(Modifier.width(14.dp))
         Column(Modifier.weight(1f).padding(end = 12.dp)) {
             Text(title, fontSize = 17.sp, fontWeight = FontWeight.Medium, color = g.text, maxLines = 1, overflow = TextOverflow.Ellipsis)
-            if (!subtitle.isNullOrBlank()) Text(subtitle, fontSize = 14.sp, color = g.text2, modifier = Modifier.padding(top = 2.dp))
+            if (!subtitle.isNullOrBlank()) Text(subtitle, fontSize = 15.sp, color = g.text2, modifier = Modifier.padding(top = 2.dp))
         }
-        if (trailing != null) Text(trailing, fontSize = 15.sp, color = g.text2, maxLines = 1)
+        if (trailing != null) Text(trailing, fontSize = 16.sp, color = g.text2, maxLines = 1)
     }
 }
 
@@ -402,7 +403,7 @@ private fun NavStyleCard(title: String, subtitle: String, selected: Boolean, mod
             Text(title, fontSize = 16.sp, fontWeight = FontWeight.SemiBold, color = g.text, modifier = Modifier.weight(1f))
             if (selected) Icon(Icons.Rounded.CheckCircle, "Selected", tint = g.accent, modifier = Modifier.size(20.dp))
         }
-        Text(subtitle, fontSize = 13.sp, color = g.text2)
+        Text(subtitle, fontSize = 14.sp, color = g.text2)
     }
 }
 
@@ -468,7 +469,7 @@ private fun GoalsPage(vm: AppViewModel) {
             Text(if (goal == 0) "No daily goal" else "$goal min a day", fontFamily = DisplaySerif, fontWeight = FontWeight.Bold, fontSize = 26.sp, color = g.text)
             Text(
                 "When you reach it you'll get a small celebration — and you can keep reading as long as you like.",
-                fontSize = 14.sp, color = g.text2, modifier = Modifier.padding(top = 4.dp, bottom = 14.dp),
+                fontSize = 15.sp, color = g.text2, modifier = Modifier.padding(top = 4.dp, bottom = 14.dp),
             )
             Row(Modifier.horizontalScroll(rememberScrollState()), horizontalArrangement = Arrangement.spacedBy(8.dp)) {
                 listOf(0, 10, 15, 20, 30, 45, 60, 90).forEach { m ->
@@ -482,7 +483,7 @@ private fun GoalsPage(vm: AppViewModel) {
             Row(Modifier.fillMaxWidth().padding(16.dp), verticalAlignment = Alignment.CenterVertically) {
                 Icon(Icons.Rounded.NotificationsOff, null, tint = g.destructive)
                 Spacer(Modifier.width(12.dp))
-                Text("Notifications are off, so reminders can't appear.", fontSize = 15.sp, color = g.text, modifier = Modifier.weight(1f))
+                Text("Notifications are off, so reminders can't appear.", fontSize = 16.sp, color = g.text, modifier = Modifier.weight(1f))
                 TextButton({
                     if (Build.VERSION.SDK_INT >= 33 && ContextCompat.checkSelfPermission(ctx, Manifest.permission.POST_NOTIFICATIONS) != PackageManager.PERMISSION_GRANTED) askPermission()
                     else ctx.startActivity(Intent(Settings.ACTION_APP_NOTIFICATION_SETTINGS).putExtra(Settings.EXTRA_APP_PACKAGE, ctx.packageName))
@@ -498,7 +499,7 @@ private fun GoalsPage(vm: AppViewModel) {
             Row(Modifier.fillMaxWidth().clickable { editing = r }.padding(horizontal = 20.dp, vertical = 12.dp), verticalAlignment = Alignment.CenterVertically) {
                 Column(Modifier.weight(1f)) {
                     Text(timeLabel(r.hour, r.minute), fontSize = 24.sp, fontWeight = FontWeight.SemiBold, color = if (r.enabled) g.text else g.text2)
-                    Text(daysLabel(r.days) + (bookTitle?.let { " · Plan: $it" } ?: ""), fontSize = 14.sp, color = g.text2, maxLines = 1)
+                    Text(daysLabel(r.days) + (bookTitle?.let { " · Plan: $it" } ?: ""), fontSize = 15.sp, color = g.text2, maxLines = 1)
                 }
                 GSwitch(r.enabled) { on -> vm.saveReminder(r.copy(enabled = on)); if (on) askPermission() }
             }
@@ -560,8 +561,8 @@ private fun AboutPage(vm: AppViewModel) {
         }
         HorizontalDivider(Modifier.padding(start = 20.dp), color = g.separator)
         Text(
-            "${data.books.size} books · ${data.highlights.size} highlights · ${data.posts.size} posts · ${formatDuration(data.books.sumOf { it.readingMs })} read",
-            fontSize = 15.sp, color = g.text2, modifier = Modifier.padding(horizontal = 20.dp, vertical = 14.dp),
+            "${plural(data.books.size, "book")} · ${plural(data.highlights.size, "highlight")} · ${plural(data.posts.size, "post")} · ${formatDuration(data.books.sumOf { it.readingMs })} read",
+            fontSize = 16.sp, color = g.text2, modifier = Modifier.padding(horizontal = 20.dp, vertical = 14.dp),
         )
     }
     Text(
@@ -620,7 +621,7 @@ fun AccentPicker(selected: String, onSelect: (String) -> Unit) {
                             ) { if (on) Icon(Icons.Rounded.Check, "Selected", tint = p.onAccent, modifier = Modifier.size(22.dp)) }
                         }
                         Text(
-                            p.name, fontSize = 12.sp, color = if (on) g.text else g.text2,
+                            p.name, fontSize = 13.sp, color = if (on) g.text else g.text2,
                             fontWeight = if (on) FontWeight.SemiBold else FontWeight.Medium,
                             textAlign = TextAlign.Center, maxLines = 1, modifier = Modifier.padding(top = 6.dp),
                         )
@@ -645,7 +646,7 @@ fun Segmented(options: List<String>, selected: Int, onSelect: (Int) -> Unit, hig
                     .padding(horizontal = 12.dp),
                 contentAlignment = Alignment.Center,
             ) {
-                Text(label, fontSize = 14.sp, fontWeight = if (on) FontWeight.SemiBold else FontWeight.Medium, color = if (on) g.accent else g.text)
+                Text(label, fontSize = 15.sp, fontWeight = if (on) FontWeight.SemiBold else FontWeight.Medium, color = if (on) g.accent else g.text)
             }
         }
     }
@@ -656,7 +657,7 @@ private fun HighlightPreview(style: Int) {
     val g = LocalG.current
     val c = HighlightColors[0]
     Text(
-        "a remembered line", fontFamily = QuoteSerif, fontSize = 15.sp, color = g.text,
+        "a remembered line", fontFamily = QuoteSerif, fontSize = 16.sp, color = g.text,
         modifier = Modifier.padding(top = 4.dp).drawBehind {
             if (style == 1) drawLine(c, Offset(0f, size.height - 2.dp.toPx()), Offset(size.width, size.height - 2.dp.toPx()), 2.5.dp.toPx(), StrokeCap.Round)
             else drawRect(c.copy(alpha = 0.38f))
@@ -690,7 +691,7 @@ private fun SyncRow(icon: ImageVector, title: String, subtitle: String, onClick:
         Spacer(Modifier.width(18.dp))
         Column {
             Text(title, fontSize = 17.sp, color = g.text)
-            Text(subtitle, fontSize = 14.sp, color = g.text2)
+            Text(subtitle, fontSize = 15.sp, color = g.text2)
         }
     }
 }

@@ -256,9 +256,9 @@ private fun NavTab(item: NavBarItem, active: Boolean, labels: Float, emojiIcons:
         verticalArrangement = androidx.compose.foundation.layout.Arrangement.Center,
     ) {
         NavIcon(item, active, emojiIcons, 24.dp + 2.dp * labels, color, gradient = true)
-        Box(Modifier.height(15.dp * labels).fillMaxWidth().clipToBounds().alpha(labels)) {
+        Box(Modifier.height(16.dp * labels).fillMaxWidth().clipToBounds().alpha(labels)) {
             Text(
-                item.label, color = color, fontSize = 11.sp, lineHeight = 14.sp,
+                item.label, color = color, fontSize = 12.sp, lineHeight = 15.sp,
                 fontWeight = if (active) FontWeight.Bold else FontWeight.Medium,
                 textAlign = TextAlign.Center, maxLines = 1, overflow = TextOverflow.Ellipsis,
                 modifier = Modifier.fillMaxWidth(),
@@ -327,7 +327,7 @@ fun ClassicNavBar(
                     verticalArrangement = androidx.compose.foundation.layout.Arrangement.Center,
                 ) {
                     NavIcon(items[i], on, emojiIcons, 24.dp, if (on) g.accent else g.text, gradient = false)
-                    if (!collapsed) Text(items[i].label, fontSize = 11.sp, fontWeight = FontWeight.Medium, color = if (on) g.accent else g.text)
+                    if (!collapsed) Text(items[i].label, fontSize = 12.sp, fontWeight = FontWeight.Medium, color = if (on) g.accent else g.text)
                 }
             }
         }

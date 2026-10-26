@@ -349,7 +349,8 @@ private fun ReaderContent(
     val minutesLeft by remember(listState, wordsAfter) {
         derivedStateOf { (wordsAfter[listState.firstVisibleItemIndex.coerceIn(0, wordsAfter.lastIndex)] / 230f).let { kotlin.math.ceil(it).toInt() } }
     }
-    val bookProgress by remember(listState, chapter, ch) {
+    // Fallback progress by chapter count, until the page map is measured.
+    val chapterProgress by remember(listState, chapter, ch) {
         derivedStateOf {
             val frac = (listState.firstVisibleItemIndex.toFloat() / ch.blocks.size.coerceAtLeast(1)).coerceIn(0f, 1f)
             ((chapter + frac) / chapters.size).coerceIn(0f, 1f)
@@ -359,14 +360,6 @@ private fun ReaderContent(
     val scrollActivity by remember(listState) { derivedStateOf { listState.firstVisibleItemIndex * 10 + listState.firstVisibleItemScrollOffset / 300 } }
     TrackReadingTime(vm, book.id, Triple(chapter, scrollActivity, chrome))
 
-    LaunchedEffect(listState, chapter) {
-        snapshotFlow { listState.firstVisibleItemIndex to listState.firstVisibleItemScrollOffset }
-            .debounce(400)
-            .collect { (i, o) ->
-                val pos = (vm.store.book(book.id)?.position ?: ReadingPosition()).copy(chapter = chapter, item = i, offset = o)
-                vm.savePosition(book.id, pos, bookProgress)
-            }
-    }
 
     fun changeFont(delta: Float) {
         val n = (s.fontSize + delta).coerceIn(MIN_FONT, MAX_FONT)
@@ -419,6 +412,23 @@ private fun ReaderContent(
             else pm.pageIn(chapter, listState.firstVisibleItemIndex, listState.firstVisibleItemScrollOffset)
         }
     }
+    /** How far through the book, by estimated pages (chapters vary a lot in length), else by chapter. */
+    val bookProgress by remember(listState, chapter) {
+        derivedStateOf {
+            val pm = pageMap; val pg = pageInChapter
+            if (pm != null && pg != null && pm.total > 0) ((pm.startOf(chapter) + pg + 1f) / pm.total).coerceIn(0f, 1f) else chapterProgress
+        }
+    }
+    LaunchedEffect(listState, chapter) {
+        // Progress is part of the key so it is saved again once the page estimate replaces the chapter-based one.
+        snapshotFlow { Triple(listState.firstVisibleItemIndex, listState.firstVisibleItemScrollOffset, bookProgress) }
+            .debounce(400)
+            .collect { (i, o, _) ->
+                val pos = (vm.store.book(book.id)?.position ?: ReadingPosition()).copy(chapter = chapter, item = i, offset = o)
+                vm.savePosition(book.id, pos, bookProgress)
+            }
+    }
+
     // A page counts as read once it has stayed on screen for a few seconds, in either mode.
     val countedPages = remember { HashSet<String>() }
     LaunchedEffect(chapter, pageInChapter) {
@@ -790,7 +800,7 @@ private fun ReaderContent(
         AnimatedVisibility(!chrome, enter = fadeIn(), exit = fadeOut()) {
             Box(Modifier.fillMaxSize()) {
                 Text(
-                    ch.title, color = ink.copy(alpha = 0.45f), fontSize = 14.sp, fontWeight = FontWeight.SemiBold, maxLines = 1,
+                    ch.title, color = ink.copy(alpha = 0.45f), fontSize = 15.sp, fontWeight = FontWeight.SemiBold, maxLines = 1,
                     overflow = TextOverflow.Ellipsis,
                     modifier = Modifier.align(Alignment.TopCenter).statusBarsPadding().padding(top = 14.dp, start = 64.dp, end = 64.dp),
                 )
@@ -799,14 +809,14 @@ private fun ReaderContent(
                     val faint = ink.copy(alpha = 0.45f)
                     Row(Modifier.fillMaxWidth().padding(bottom = 7.dp)) {
                         if (pm != null && pg != null) {
-                            Text("Page ${pm.startOf(chapter) + pg + 1} of ${pm.total}", color = faint, fontSize = 13.sp, modifier = Modifier.weight(1f))
+                            Text("Page ${pm.startOf(chapter) + pg + 1} of ${pm.total}", color = faint, fontSize = 14.sp, modifier = Modifier.weight(1f))
                             val left = pm.pagesIn(chapter) - 1 - pg
                             Text(
                                 when (left) { 0 -> "Last page in chapter"; 1 -> "1 page left in chapter"; else -> "$left pages left in chapter" },
-                                color = faint, fontSize = 13.sp,
+                                color = faint, fontSize = 14.sp,
                             )
                         } else {
-                            Text(if (minutesLeft <= 1) "${(bookProgress * 100).toInt()}%" else "$minutesLeft min left in chapter · ${(bookProgress * 100).toInt()}%", color = faint, fontSize = 13.sp)
+                            Text(if (minutesLeft <= 1) "${(bookProgress * 100).toInt()}%" else "$minutesLeft min left in chapter · ${(bookProgress * 100).toInt()}%", color = faint, fontSize = 14.sp)
                         }
                     }
                     val frac = if (pm != null && pg != null && pm.total > 0) (pm.startOf(chapter) + pg + 1f) / pm.total else bookProgress
@@ -835,7 +845,7 @@ private fun ReaderContent(
                 Text(
                     if (pm != null && pg != null) "Page ${pm.startOf(chapter) + pg + 1} of ${pm.total} · ${(bookProgress * 100).toInt()}%"
                     else "Chapter ${chapter + 1} of ${chapters.size} · ${(bookProgress * 100).toInt()}%",
-                    color = g.text, fontSize = 14.sp,
+                    color = g.text, fontSize = 15.sp,
                     modifier = Modifier.padding(bottom = 10.dp).panel(CircleShape).padding(horizontal = 16.dp, vertical = 8.dp),
                 )
                 Row(verticalAlignment = Alignment.CenterVertically) {
@@ -844,7 +854,7 @@ private fun ReaderContent(
                     SegmentCapsule(height = 52.dp) {
                         CapsuleSegment({ changeFont(-1f) }, enabled = s.fontSize > MIN_FONT) { Text("A", fontSize = 16.sp, color = g.text, fontWeight = FontWeight.Medium) }
                         CapsuleDivider()
-                        Text("${s.fontSize.toInt()}", fontSize = 15.sp, color = g.text2, modifier = Modifier.padding(horizontal = 12.dp))
+                        Text("${s.fontSize.toInt()}", fontSize = 16.sp, color = g.text2, modifier = Modifier.padding(horizontal = 12.dp))
                         CapsuleDivider()
                         CapsuleSegment({ changeFont(1f) }, enabled = s.fontSize < MAX_FONT) { Text("A", fontSize = 26.sp, color = g.text, fontWeight = FontWeight.Medium) }
                     }
@@ -1235,7 +1245,7 @@ private fun ChapterEnd(next: String?, ink: Color, onNext: () -> Unit, onPosts: (
         Text("⁂", color = ink.copy(alpha = 0.4f), fontSize = 22.sp)
         Spacer(Modifier.height(24.dp))
         if (next != null) {
-            Text("NEXT CHAPTER", color = ink.copy(alpha = 0.5f), fontSize = 12.sp, fontWeight = FontWeight.SemiBold, letterSpacing = 1.5.sp)
+            Text("NEXT CHAPTER", color = ink.copy(alpha = 0.5f), fontSize = 13.sp, fontWeight = FontWeight.SemiBold, letterSpacing = 1.5.sp)
             Text(next, color = ink, fontFamily = DisplaySerif, fontWeight = FontWeight.Bold, fontSize = 22.sp, textAlign = TextAlign.Center, modifier = Modifier.padding(top = 6.dp, bottom = 18.dp))
             PrimaryButton("Continue Reading", onNext, icon = Icons.Rounded.ChevronRight)
         } else {
@@ -1335,7 +1345,7 @@ private fun BarAction(icon: androidx.compose.ui.graphics.vector.ImageVector, lab
         horizontalAlignment = Alignment.CenterHorizontally,
     ) {
         Icon(icon, label, tint = g.text, modifier = Modifier.size(24.dp))
-        Text(label, fontSize = 12.sp, color = g.text)
+        Text(label, fontSize = 13.sp, color = g.text)
     }
 }
 
@@ -1418,7 +1428,7 @@ fun ContentsSheet(
                 Box(
                     Modifier.weight(1f).fillMaxSize().clip(CircleShape).background(if (tab == i) g.surface else Color.Transparent).clickable { tab = i },
                     contentAlignment = Alignment.Center,
-                ) { Text(label, fontSize = 15.sp, fontWeight = FontWeight.SemiBold, color = g.text) }
+                ) { Text(label, fontSize = 16.sp, fontWeight = FontWeight.SemiBold, color = g.text) }
             }
         }
         LazyColumn(state = list, modifier = Modifier.padding(top = 8.dp).weight(1f), contentPadding = PaddingValues(bottom = 24.dp)) {
@@ -1440,11 +1450,11 @@ fun ContentsSheet(
                     Column(Modifier.fillMaxWidth().clickable { onHighlight(h) }.padding(horizontal = 24.dp, vertical = 12.dp)) {
                         Row(verticalAlignment = Alignment.CenterVertically) {
                             Box(Modifier.size(10.dp).clip(CircleShape).background(HighlightColors[h.color % HighlightColors.size]))
-                            Text(chapters.getOrNull(h.chapter)?.title.orEmpty(), fontSize = 13.sp, color = g.text2, modifier = Modifier.padding(start = 8.dp).weight(1f, fill = false), maxLines = 1)
-                            h.reaction?.let { Text(it, fontSize = 14.sp, modifier = Modifier.padding(start = 6.dp)) }
+                            Text(chapters.getOrNull(h.chapter)?.title.orEmpty(), fontSize = 14.sp, color = g.text2, modifier = Modifier.padding(start = 8.dp).weight(1f, fill = false), maxLines = 1)
+                            h.reaction?.let { Text(it, fontSize = 15.sp, modifier = Modifier.padding(start = 6.dp)) }
                         }
                         Text(h.text, fontFamily = QuoteSerif, fontSize = 17.sp, color = g.text, maxLines = 4, overflow = TextOverflow.Ellipsis, modifier = Modifier.padding(top = 4.dp))
-                        if (!h.note.isNullOrBlank()) Text("✎ ${h.note}", fontSize = 14.sp, color = g.text2, modifier = Modifier.padding(top = 4.dp))
+                        if (!h.note.isNullOrBlank()) Text("✎ ${h.note}", fontSize = 15.sp, color = g.text2, modifier = Modifier.padding(top = 4.dp))
                     }
                     HorizontalDivider(Modifier.padding(start = 24.dp), color = g.separator)
                 }
@@ -1493,11 +1503,11 @@ private fun SearchSheet(chapters: List<Chapter>, onDismiss: () -> Unit, onResult
                 BasicTextField(q, { q = it }, singleLine = true, textStyle = TextStyle(color = g.text, fontSize = 17.sp), cursorBrush = SolidColor(g.accent), modifier = Modifier.fillMaxWidth())
             }
         }
-        if (q.trim().length >= 2) Text("${results.size}${if (results.size >= 200) "+" else ""} results", fontSize = 13.sp, color = g.text2, modifier = Modifier.padding(start = 24.dp, top = 4.dp))
+        if (q.trim().length >= 2) Text("${results.size}${if (results.size >= 200) "+" else ""} results", fontSize = 14.sp, color = g.text2, modifier = Modifier.padding(start = 24.dp, top = 4.dp))
         LazyColumn(Modifier.weight(1f), contentPadding = PaddingValues(bottom = 24.dp)) {
             items(results) { (ci, bi, snippet) ->
                 Column(Modifier.fillMaxWidth().clickable { onResult(ci, bi, q.trim()) }.padding(horizontal = 24.dp, vertical = 12.dp)) {
-                    Text(chapters[ci].title, fontSize = 15.sp, fontWeight = FontWeight.SemiBold, color = g.text, maxLines = 1)
+                    Text(chapters[ci].title, fontSize = 16.sp, fontWeight = FontWeight.SemiBold, color = g.text, maxLines = 1)
                     Text(snippet, fontFamily = QuoteSerif, fontSize = 16.sp, color = g.text, maxLines = 3, overflow = TextOverflow.Ellipsis, modifier = Modifier.padding(top = 2.dp))
                 }
                 HorizontalDivider(Modifier.padding(start = 24.dp), color = g.separator)
@@ -1519,7 +1529,7 @@ fun ReaderSettingsSheet(vm: AppViewModel, s: ReaderSettings, dark: Boolean, onDi
                 SegmentCapsule(Modifier.weight(1f), height = 52.dp, tint = g.fill) {
                     CapsuleSegment({ vm.updateSettings { it.copy(fontSize = (it.fontSize - 1).coerceAtLeast(MIN_FONT)) } }, Modifier.weight(1f)) { Text("A", fontSize = 17.sp, color = g.text) }
                     CapsuleDivider()
-                    Text("${s.fontSize.toInt()}", fontSize = 15.sp, color = g.text2, modifier = Modifier.padding(horizontal = 10.dp))
+                    Text("${s.fontSize.toInt()}", fontSize = 16.sp, color = g.text2, modifier = Modifier.padding(horizontal = 10.dp))
                     CapsuleDivider()
                     CapsuleSegment({ vm.updateSettings { it.copy(fontSize = (it.fontSize + 1).coerceAtMost(MAX_FONT)) } }, Modifier.weight(1f)) { Text("A", fontSize = 27.sp, color = g.text) }
                 }
@@ -1547,7 +1557,7 @@ fun ReaderSettingsSheet(vm: AppViewModel, s: ReaderSettings, dark: Boolean, onDi
                         horizontalAlignment = Alignment.CenterHorizontally, verticalArrangement = Arrangement.Center,
                     ) {
                         Text("Aa", fontFamily = readingFont(s.font).family, fontSize = 32.sp, color = fg, fontWeight = if (t.bold) FontWeight.Black else FontWeight.Normal)
-                        Text(t.name, fontSize = 15.sp, color = fg, fontWeight = FontWeight.Medium)
+                        Text(t.name, fontSize = 16.sp, color = fg, fontWeight = FontWeight.Medium)
                     }
                 }
             }
@@ -1560,7 +1570,7 @@ fun ReaderSettingsSheet(vm: AppViewModel, s: ReaderSettings, dark: Boolean, onDi
             }
             Text(
                 "Tip: pinch the page with two fingers to change text size.",
-                fontSize = 13.sp, color = g.text2, modifier = Modifier.fillMaxWidth().padding(bottom = 16.dp), textAlign = TextAlign.Center,
+                fontSize = 14.sp, color = g.text2, modifier = Modifier.fillMaxWidth().padding(bottom = 16.dp), textAlign = TextAlign.Center,
             )
         }
     }
@@ -1590,7 +1600,7 @@ fun FontPicker(selected: String, onPick: (String) -> Unit) {
                 verticalAlignment = Alignment.CenterVertically,
             ) {
                 Text(f.name, fontFamily = f.family, fontSize = 20.sp, color = g.text, modifier = Modifier.weight(1f))
-                Text("like ${f.like}", fontSize = 13.sp, color = g.text2)
+                Text("like ${f.like}", fontSize = 14.sp, color = g.text2)
                 Box(Modifier.padding(start = 10.dp).size(22.dp)) {
                     if (f.id == selected) Icon(Icons.Rounded.Check, "Selected", tint = g.text)
                 }
@@ -1611,8 +1621,8 @@ private fun SettingSlider(
     val g = LocalG.current
     Column(Modifier.fillMaxWidth().padding(top = 10.dp)) {
         if (label != null) Row(Modifier.fillMaxWidth().padding(start = 34.dp), verticalAlignment = Alignment.CenterVertically) {
-            Text(label, fontSize = 14.sp, color = g.text2, modifier = Modifier.weight(1f))
-            if (valueText != null) Text(valueText, fontSize = 14.sp, color = g.text2)
+            Text(label, fontSize = 15.sp, color = g.text2, modifier = Modifier.weight(1f))
+            if (valueText != null) Text(valueText, fontSize = 15.sp, color = g.text2)
         }
         Row(Modifier.fillMaxWidth(), verticalAlignment = Alignment.CenterVertically) {
             Icon(icon, null, tint = g.text2, modifier = Modifier.size(22.dp))
@@ -1630,8 +1640,8 @@ fun MarginControl(margin: Int, onChange: (Int) -> Unit) {
     val g = LocalG.current
     Column(Modifier.fillMaxWidth().padding(top = 10.dp)) {
         Row(Modifier.fillMaxWidth().padding(start = 34.dp), verticalAlignment = Alignment.CenterVertically) {
-            Text("Margins", fontSize = 14.sp, color = g.text2, modifier = Modifier.weight(1f))
-            Text("$margin", fontSize = 14.sp, color = g.text2)
+            Text("Margins", fontSize = 15.sp, color = g.text2, modifier = Modifier.weight(1f))
+            Text("$margin", fontSize = 15.sp, color = g.text2)
         }
         Row(Modifier.fillMaxWidth(), verticalAlignment = Alignment.CenterVertically) {
             Icon(Icons.Rounded.FormatIndentIncrease, null, tint = g.text2, modifier = Modifier.size(22.dp))
@@ -1641,7 +1651,7 @@ fun MarginControl(margin: Int, onChange: (Int) -> Unit) {
             listOf("Narrow" to 8, "Normal" to 24, "Wide" to 44, "Extra wide" to 64).forEach { (name, v) ->
                 val on = margin == v
                 Text(
-                    name, fontSize = 13.sp, fontWeight = if (on) FontWeight.SemiBold else FontWeight.Medium, color = if (on) g.accent else g.text,
+                    name, fontSize = 14.sp, fontWeight = if (on) FontWeight.SemiBold else FontWeight.Medium, color = if (on) g.accent else g.text,
                     modifier = Modifier.clip(CircleShape).background(if (on) g.accent.copy(alpha = 0.16f) else g.fill)
                         .clickable { onChange(v) }.padding(horizontal = 12.dp, vertical = 6.dp),
                 )
@@ -1669,7 +1679,7 @@ fun PageModeControl(mode: Int, onChange: (Int) -> Unit) {
                 Icon(icon, null, tint = if (on) g.accent else g.text2, modifier = Modifier.size(22.dp))
                 Column(Modifier.padding(start = 10.dp)) {
                     Text(title, fontSize = 16.sp, fontWeight = FontWeight.SemiBold, color = g.text)
-                    Text(sub, fontSize = 12.sp, color = g.text2, maxLines = 1)
+                    Text(sub, fontSize = 13.sp, color = g.text2, maxLines = 1)
                 }
             }
         }

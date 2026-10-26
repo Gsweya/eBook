@@ -1,5 +1,6 @@
 package com.gbook.ui.screens
 
+import com.gbook.ui.components.plural
 import com.gbook.ui.components.bottomBarClearance
 import androidx.compose.animation.AnimatedVisibility
 import androidx.compose.animation.core.Spring
@@ -130,7 +131,7 @@ fun FeedTab(vm: AppViewModel, nav: Nav, onGenerate: () -> Unit, onScrollDir: (Bo
                 items(FeedFilter.entries) { f ->
                     val on = f == filter
                     Text(
-                        f.label, fontSize = 15.sp, fontWeight = FontWeight.Medium,
+                        f.label, fontSize = 16.sp, fontWeight = FontWeight.Medium,
                         color = if (on) g.onPrimary else g.text,
                         modifier = Modifier.clip(CircleShape).background(if (on) g.primary else g.fill)
                             .clickable { filter = f }.padding(horizontal = 16.dp, vertical = 9.dp),
@@ -169,12 +170,12 @@ fun PostCard(vm: AppViewModel, post: Post, book: Book, onOpen: () -> Unit) {
             BookCover(vm.coverPath(book), book.title, book.author, book.coverColor, Modifier.height(40.dp), elevation = 2.dp)
             Spacer(Modifier.width(10.dp))
             Column(Modifier.weight(1f)) {
-                Text(book.title, fontSize = 15.sp, fontWeight = FontWeight.SemiBold, color = g.text, maxLines = 1, overflow = TextOverflow.Ellipsis)
-                Text(post.chapterTitle.ifBlank { book.author }, fontSize = 13.sp, color = g.text2, maxLines = 1, overflow = TextOverflow.Ellipsis)
+                Text(book.title, fontSize = 16.sp, fontWeight = FontWeight.SemiBold, color = g.text, maxLines = 1, overflow = TextOverflow.Ellipsis)
+                Text(post.chapterTitle.ifBlank { book.author }, fontSize = 14.sp, color = g.text2, maxLines = 1, overflow = TextOverflow.Ellipsis)
             }
             Text(
                 when (post.kind) { PostKind.QUOTE -> "Highlight"; PostKind.IDEA -> "Key idea"; PostKind.RECAP -> "Recap" },
-                fontSize = 12.sp, fontWeight = FontWeight.SemiBold, color = g.text2,
+                fontSize = 13.sp, fontWeight = FontWeight.SemiBold, color = g.text2,
                 modifier = Modifier.background(g.fill, CircleShape).padding(horizontal = 10.dp, vertical = 4.dp),
             )
         }
@@ -219,10 +220,10 @@ fun PostCard(vm: AppViewModel, post: Post, book: Book, onOpen: () -> Unit) {
             if (post.liked) add("Liked by you")
             if (post.reactions.isNotEmpty()) add(post.reactions.entries.joinToString(" ") { "${it.key} ${it.value}" })
         }.joinToString("  ·  ")
-        if (summary.isNotEmpty()) Text(summary, fontSize = 14.sp, fontWeight = FontWeight.SemiBold, color = g.text, modifier = Modifier.padding(horizontal = 18.dp))
+        if (summary.isNotEmpty()) Text(summary, fontSize = 15.sp, fontWeight = FontWeight.SemiBold, color = g.text, modifier = Modifier.padding(horizontal = 18.dp))
         Text(
             "${book.title} · tap the header to read this chapter",
-            fontSize = 13.sp, color = g.text2, modifier = Modifier.padding(horizontal = 18.dp, vertical = 2.dp),
+            fontSize = 14.sp, color = g.text2, modifier = Modifier.padding(horizontal = 18.dp, vertical = 2.dp),
         )
     }
 }
@@ -272,7 +273,7 @@ private fun PostSlide(vm: AppViewModel, post: Post, book: Book, page: Int) {
             if (isRecapTitle) {
                 Column {
                     Text(text, color = s.text, fontFamily = DisplaySerif, fontWeight = FontWeight.Bold, fontSize = 34.sp, lineHeight = 40.sp)
-                    Text("Swipe for the key points  →", color = s.accent, fontSize = 15.sp, modifier = Modifier.padding(top = 16.dp))
+                    Text("Swipe for the key points  →", color = s.accent, fontSize = 16.sp, modifier = Modifier.padding(top = 16.dp))
                 }
             } else {
                 Column {
@@ -291,10 +292,10 @@ private fun PostSlide(vm: AppViewModel, post: Post, book: Book, page: Int) {
             BookCover(vm.coverPath(book), book.title, book.author, book.coverColor, Modifier.height(38.dp), elevation = 2.dp)
             Spacer(Modifier.width(10.dp))
             Column(Modifier.weight(1f)) {
-                Text(book.title, color = s.text, fontSize = 13.sp, fontWeight = FontWeight.SemiBold, maxLines = 1, overflow = TextOverflow.Ellipsis)
-                Text(book.author, color = s.text.copy(alpha = 0.7f), fontSize = 12.sp, maxLines = 1)
+                Text(book.title, color = s.text, fontSize = 14.sp, fontWeight = FontWeight.SemiBold, maxLines = 1, overflow = TextOverflow.Ellipsis)
+                Text(book.author, color = s.text.copy(alpha = 0.7f), fontSize = 13.sp, maxLines = 1)
             }
-            Text("GBook", color = s.accent, fontFamily = DisplaySerif, fontWeight = FontWeight.Bold, fontSize = 14.sp)
+            Text("GBook", color = s.accent, fontFamily = DisplaySerif, fontWeight = FontWeight.Bold, fontSize = 15.sp)
         }
     }
 }
@@ -317,7 +318,7 @@ fun GeneratePostsSheet(vm: AppViewModel, onDismiss: () -> Unit, preselect: Strin
             style = GType.secondary, color = g.text2, modifier = Modifier.padding(horizontal = 24.dp, vertical = 4.dp),
         )
         Column(Modifier.padding(16.dp).clip(RoundedCornerShape(22.dp)).background(g.surface)) {
-            OptionRow("From my highlights", "${data.highlights.count { it.bookId in selected }} highlights", fromHighlights) { fromHighlights = it }
+            OptionRow("From my highlights", plural(data.highlights.count { it.bookId in selected }, "highlight"), fromHighlights) { fromHighlights = it }
             HorizontalDivider(Modifier.padding(start = 20.dp), color = g.separator)
             OptionRow("Key ideas", "The strongest sentence of each chapter", ideas) { ideas = it }
             HorizontalDivider(Modifier.padding(start = 20.dp), color = g.separator)
@@ -338,7 +339,7 @@ fun GeneratePostsSheet(vm: AppViewModel, onDismiss: () -> Unit, preselect: Strin
                         Text(b.title, fontSize = 16.sp, fontWeight = FontWeight.SemiBold, color = g.text, maxLines = 1, overflow = TextOverflow.Ellipsis)
                         Text(
                             if (!b.textReady) "Preparing text… ${((preparing ?: 0f) * 100).toInt()}%" else b.author,
-                            fontSize = 13.sp, color = g.text2, maxLines = 1,
+                            fontSize = 14.sp, color = g.text2, maxLines = 1,
                         )
                     }
                     Icon(
@@ -371,7 +372,7 @@ fun OptionRow(title: String, subtitle: String?, checked: Boolean, onChange: (Boo
     Row(Modifier.fillMaxWidth().padding(horizontal = 20.dp, vertical = 10.dp), verticalAlignment = Alignment.CenterVertically) {
         Column(Modifier.weight(1f)) {
             Text(title, fontSize = 17.sp, color = g.text)
-            if (subtitle != null) Text(subtitle, fontSize = 14.sp, color = g.text2)
+            if (subtitle != null) Text(subtitle, fontSize = 15.sp, color = g.text2)
         }
         GSwitch(checked, onChange)
     }

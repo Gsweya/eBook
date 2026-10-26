@@ -1,5 +1,6 @@
 package com.gbook.ui.screens
 
+import com.gbook.ui.components.plural
 import androidx.activity.compose.rememberLauncherForActivityResult
 import androidx.activity.result.contract.ActivityResultContracts
 import androidx.compose.foundation.background
@@ -110,7 +111,7 @@ fun BookDetailScreen(vm: AppViewModel, id: String, nav: Nav) {
                         if (book.readingMs > 0) add(com.gbook.ui.components.formatDuration(book.readingMs) + " reading")
                         if (book.pagesRead > 0) add("${book.pagesRead} pages read")
                     }.joinToString(" · ")
-                    Text(meta, color = Color.White, fontSize = 15.sp, modifier = Modifier.padding(bottom = 14.dp))
+                    Text(meta, color = Color.White, fontSize = 16.sp, modifier = Modifier.padding(bottom = 14.dp))
                     PrimaryButton(
                         if (book.progress > 0f) "Continue Reading" else "Read",
                         onClick = { vm.markOpened(book.id); nav.open(book) },
@@ -137,8 +138,8 @@ fun BookDetailScreen(vm: AppViewModel, id: String, nav: Nav) {
                     .padding(24.dp).navigationBarsPadding(),
             ) {
                 Text("Highlights", fontFamily = DisplaySerif, fontWeight = FontWeight.Bold, fontSize = 24.sp, color = g.text)
-                Text("${highlights.size} highlights · $posts posts in your Feed", fontSize = 15.sp, color = g.text2, modifier = Modifier.padding(bottom = 12.dp))
-                if (highlights.isEmpty()) Text("Long-press text while reading to highlight it.", fontSize = 15.sp, color = g.text2)
+                Text("${plural(highlights.size, "highlight")} · ${plural(posts, "post")} in your Feed", fontSize = 16.sp, color = g.text2, modifier = Modifier.padding(bottom = 12.dp))
+                if (highlights.isEmpty()) Text("Long-press text while reading to highlight it.", fontSize = 16.sp, color = g.text2)
                 highlights.forEach { h ->
                     Row(
                         Modifier.fillMaxWidth().padding(vertical = 5.dp).clip(RoundedCornerShape(18.dp)).background(g.grouped)

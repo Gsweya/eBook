@@ -122,7 +122,7 @@ fun DayChips(days: Set<Int>, onChange: (Set<Int>) -> Unit) {
             ) {
                 Text(
                     java.time.DayOfWeek.of(d).getDisplayName(TextStyle.NARROW, Locale.getDefault()),
-                    fontSize = 14.sp, fontWeight = FontWeight.SemiBold, color = if (on) g.onAccent else g.text,
+                    fontSize = 15.sp, fontWeight = FontWeight.SemiBold, color = if (on) g.onAccent else g.text,
                 )
             }
         }
@@ -156,7 +156,7 @@ fun ReminderDialog(initial: Reminder?, onDismiss: () -> Unit, onSave: (Reminder)
                     timeSelectorUnselectedContentColor = g.text,
                 ),
             )
-            Text("Repeat · ${daysLabel(days)}", fontSize = 14.sp, color = g.text2, modifier = Modifier.fillMaxWidth().padding(top = 4.dp, bottom = 10.dp))
+            Text("Repeat · ${daysLabel(days)}", fontSize = 15.sp, color = g.text2, modifier = Modifier.fillMaxWidth().padding(top = 4.dp, bottom = 10.dp))
             DayChips(days) { days = it }
             Row(Modifier.fillMaxWidth().padding(top = 18.dp), verticalAlignment = Alignment.CenterVertically) {
                 if (onDelete != null) TextButton(onDelete) { Text("Delete", color = g.destructive) }
@@ -198,10 +198,10 @@ fun PlanSheet(vm: AppViewModel, book: Book, onDismiss: () -> Unit) {
                 Spacer(Modifier.width(14.dp))
                 Column {
                     Text(book.title, fontSize = 18.sp, fontWeight = FontWeight.SemiBold, color = g.text, maxLines = 2, overflow = TextOverflow.Ellipsis)
-                    Text("${(book.progress * 100).toInt()}% read", fontSize = 14.sp, color = g.text2)
+                    Text("${(book.progress * 100).toInt()}% read", fontSize = 15.sp, color = g.text2)
                 }
             }
-            Text("FINISH BY", fontSize = 13.sp, fontWeight = FontWeight.SemiBold, letterSpacing = 1.5.sp, color = g.text2, modifier = Modifier.padding(top = 22.dp, bottom = 8.dp))
+            Text("FINISH BY", fontSize = 14.sp, fontWeight = FontWeight.SemiBold, letterSpacing = 1.5.sp, color = g.text2, modifier = Modifier.padding(top = 22.dp, bottom = 8.dp))
             Row(Modifier.horizontalScroll(rememberScrollState()), horizontalArrangement = Arrangement.spacedBy(8.dp)) {
                 listOf("1 week" to today.plusWeeks(1), "2 weeks" to today.plusWeeks(2), "1 month" to today.plusMonths(1), "3 months" to today.plusMonths(3))
                     .forEach { (label, date) -> SelectChip(label, target == date) { target = date } }
@@ -217,10 +217,10 @@ fun PlanSheet(vm: AppViewModel, book: Book, onDismiss: () -> Unit) {
                         append(" · ${status.dueLabel()}")
                         minutes?.let { append(" · about $it min a day") }
                     },
-                    fontSize = 14.sp, color = g.text2, modifier = Modifier.padding(top = 4.dp),
+                    fontSize = 15.sp, color = g.text2, modifier = Modifier.padding(top = 4.dp),
                 )
             }
-            Text("REMINDER", fontSize = 13.sp, fontWeight = FontWeight.SemiBold, letterSpacing = 1.5.sp, color = g.text2, modifier = Modifier.padding(top = 22.dp, bottom = 8.dp))
+            Text("REMINDER", fontSize = 14.sp, fontWeight = FontWeight.SemiBold, letterSpacing = 1.5.sp, color = g.text2, modifier = Modifier.padding(top = 22.dp, bottom = 8.dp))
             Column(Modifier.fillMaxWidth().clip(RoundedCornerShape(22.dp)).background(g.surface)) {
                 Row(Modifier.fillMaxWidth().padding(horizontal = 18.dp, vertical = 10.dp), verticalAlignment = Alignment.CenterVertically) {
                     Text("Remind me to read", fontSize = 17.sp, color = g.text, modifier = Modifier.weight(1f))
@@ -231,9 +231,9 @@ fun PlanSheet(vm: AppViewModel, book: Book, onDismiss: () -> Unit) {
                     Row(Modifier.fillMaxWidth().clickable { editingTime = true }.padding(horizontal = 18.dp, vertical = 14.dp), verticalAlignment = Alignment.CenterVertically) {
                         Column(Modifier.weight(1f)) {
                             Text(timeLabel(reminder.hour, reminder.minute), fontSize = 22.sp, fontWeight = FontWeight.SemiBold, color = g.text)
-                            Text(daysLabel(reminder.days), fontSize = 14.sp, color = g.text2)
+                            Text(daysLabel(reminder.days), fontSize = 15.sp, color = g.text2)
                         }
-                        Text("Change", fontSize = 15.sp, color = g.accent, fontWeight = FontWeight.SemiBold)
+                        Text("Change", fontSize = 16.sp, color = g.accent, fontWeight = FontWeight.SemiBold)
                     }
                 }
             }
@@ -288,7 +288,7 @@ fun PlanSheet(vm: AppViewModel, book: Book, onDismiss: () -> Unit) {
 fun SelectChip(label: String, selected: Boolean, onClick: () -> Unit) {
     val g = LocalG.current
     Text(
-        label, fontSize = 15.sp, fontWeight = if (selected) FontWeight.SemiBold else FontWeight.Medium,
+        label, fontSize = 16.sp, fontWeight = if (selected) FontWeight.SemiBold else FontWeight.Medium,
         color = if (selected) g.accent else g.text,
         modifier = Modifier.clip(CircleShape).background(if (selected) g.accent.copy(alpha = 0.18f) else g.fill)
             .then(if (selected) Modifier.border(1.dp, g.accent.copy(alpha = 0.6f), CircleShape) else Modifier)
@@ -320,13 +320,13 @@ fun PlanCard(vm: AppViewModel, plan: ReadingPlan, book: Book, onClick: () -> Uni
             Row(verticalAlignment = Alignment.CenterVertically) {
                 Text(book.title, fontSize = 16.sp, fontWeight = FontWeight.SemiBold, color = g.text, maxLines = 1, overflow = TextOverflow.Ellipsis, modifier = Modifier.weight(1f, fill = false))
                 Spacer(Modifier.width(8.dp))
-                Text(label, fontSize = 12.sp, fontWeight = FontWeight.SemiBold, color = color,
+                Text(label, fontSize = 13.sp, fontWeight = FontWeight.SemiBold, color = color,
                     modifier = Modifier.clip(CircleShape).background(color.copy(alpha = 0.15f)).padding(horizontal = 8.dp, vertical = 3.dp))
             }
             Text(
                 if (st.done) "Finished" else "Finish by " + LocalDate.parse(plan.targetDate).format(DateTimeFormatter.ofPattern("d MMM", Locale.getDefault())) +
                     " · ${st.dueLabel()} · ${paceText(book, st.perDay)}",
-                fontSize = 13.sp, color = g.text2, maxLines = 1, overflow = TextOverflow.Ellipsis, modifier = Modifier.padding(top = 2.dp),
+                fontSize = 14.sp, color = g.text2, maxLines = 1, overflow = TextOverflow.Ellipsis, modifier = Modifier.padding(top = 2.dp),
             )
             // Progress, with a tick where the reader should be today.
             androidx.compose.foundation.layout.BoxWithConstraints(Modifier.padding(top = 10.dp).fillMaxWidth().height(8.dp)) {

@@ -251,14 +251,14 @@ private fun PdfPages(vm: AppViewModel, id: String, onBack: () -> Unit, reflowLab
         AnimatedVisibility(chrome, Modifier.align(Alignment.BottomCenter), enter = fadeIn(), exit = fadeOut()) {
             Row(Modifier.fillMaxWidth().navigationBarsPadding().padding(12.dp), verticalAlignment = Alignment.CenterVertically) {
                 Text(
-                    "${list.firstVisibleItemIndex + 1} of ${doc.count}", fontSize = 15.sp, color = g.text,
+                    "${list.firstVisibleItemIndex + 1} of ${doc.count}", fontSize = 16.sp, color = g.text,
                     modifier = Modifier.panel(CircleShape).padding(horizontal = 16.dp, vertical = 14.dp),
                 )
                 Spacer(Modifier.weight(1f))
                 SegmentCapsule(height = 52.dp) {
                     CapsuleSegment({ setZoom(zoom - 0.5f, 0f) }, enabled = zoom > 1f) { Icon(Icons.Rounded.ZoomOut, "Zoom out", tint = g.text) }
                     CapsuleDivider()
-                    Text("${(zoom * 100).toInt()}%", fontSize = 15.sp, fontWeight = FontWeight.Medium, color = g.text, modifier = Modifier.padding(horizontal = 10.dp))
+                    Text("${(zoom * 100).toInt()}%", fontSize = 16.sp, fontWeight = FontWeight.Medium, color = g.text, modifier = Modifier.padding(horizontal = 10.dp))
                     CapsuleDivider()
                     CapsuleSegment({ setZoom(zoom + 0.5f, 0f) }, enabled = zoom < 5f) { Icon(Icons.Rounded.ZoomIn, "Zoom in", tint = g.text) }
                 }

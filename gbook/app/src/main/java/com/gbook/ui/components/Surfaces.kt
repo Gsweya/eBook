@@ -213,3 +213,6 @@ fun GSlider(value: Float, range: ClosedFloatingPointRange<Float>, onChange: (Flo
 @Composable
 fun bottomBarClearance(extra: Dp = 0.dp): Dp =
     androidx.compose.foundation.layout.WindowInsets.navigationBars.asPaddingValues().calculateBottomPadding() + 108.dp + extra
+
+/** "1 book", "3 books": [n] followed by [word], with an "s" unless n is 1. */
+fun plural(n: Int, word: String) = if (n == 1) "1 $word" else "$n ${word}s"

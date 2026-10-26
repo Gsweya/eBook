@@ -112,10 +112,10 @@ object GType {
     val largeTitle = SerifTitle.copy(fontSize = 34.sp, lineHeight = 40.sp)
     val section = SerifTitle.copy(fontSize = 24.sp, lineHeight = 30.sp)
     val navTitle = TextStyle(fontFamily = AppSans, fontSize = 17.sp, fontWeight = FontWeight.SemiBold)
-    val body = TextStyle(fontFamily = AppSans, fontSize = 17.sp)
-    val secondary = TextStyle(fontFamily = AppSans, fontSize = 15.sp)
-    val caption = TextStyle(fontFamily = AppSans, fontSize = 13.sp)
-    val eyebrow = TextStyle(fontFamily = AppSans, fontSize = 13.sp, fontWeight = FontWeight.SemiBold, letterSpacing = 1.5.sp)
+    val body = TextStyle(fontFamily = AppSans, fontSize = 17.sp, fontWeight = FontWeight.Medium)
+    val secondary = TextStyle(fontFamily = AppSans, fontSize = 16.sp, fontWeight = FontWeight.Medium)
+    val caption = TextStyle(fontFamily = AppSans, fontSize = 15.sp, fontWeight = FontWeight.Medium)
+    val eyebrow = TextStyle(fontFamily = AppSans, fontSize = 14.sp, fontWeight = FontWeight.Bold, letterSpacing = 1.3.sp)
 }
 
 @Immutable
@@ -145,7 +145,8 @@ val HighlightColors = listOf(
 val SelectionColor = Color(0xFFA8C0F5)
 
 private val AppTypography = Typography().let { t ->
-    fun TextStyle.sans() = copy(fontFamily = AppSans)
+    // Medium (500) by default: DM Sans Regular reads thin and faint on phone screens.
+    fun TextStyle.sans() = copy(fontFamily = AppSans, fontWeight = fontWeight?.takeIf { it > FontWeight.Medium } ?: FontWeight.Medium)
     t.copy(
         displayLarge = t.displayLarge.sans(), displayMedium = t.displayMedium.sans(), displaySmall = t.displaySmall.sans(),
         headlineLarge = t.headlineLarge.sans(), headlineMedium = t.headlineMedium.sans(), headlineSmall = t.headlineSmall.sans(),

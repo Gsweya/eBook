@@ -237,7 +237,7 @@ fun SelectionActions(count: Int, modifier: Modifier = Modifier, onCancel: () -> 
     ) {
         Column(Modifier.weight(1f)) {
             Text("$count selected", style = GType.navTitle, color = g.text)
-            Text("Cancel", color = g.accent, fontSize = 15.sp, modifier = Modifier.clip(CircleShape).clickable(onClick = onCancel).padding(vertical = 2.dp))
+            Text("Cancel", color = g.accent, fontSize = 16.sp, modifier = Modifier.clip(CircleShape).clickable(onClick = onCancel).padding(vertical = 2.dp))
         }
         actions()
     }
@@ -277,7 +277,7 @@ fun AddToCollectionSheet(vm: AppViewModel, bookIds: List<String>, onDismiss: () 
                     }
                     Column(Modifier.weight(1f).padding(start = 14.dp)) {
                         Text(c.name, fontSize = 17.sp, color = g.text, maxLines = 1, overflow = TextOverflow.Ellipsis)
-                        Text("${c.bookIds.size} books", fontSize = 13.sp, color = g.text2)
+                        Text("${c.bookIds.size} books", fontSize = 14.sp, color = g.text2)
                     }
                     if (all) Icon(Icons.Rounded.Check, "In collection", tint = g.accent)
                 }
@@ -312,7 +312,7 @@ fun BookPickerSheet(vm: AppViewModel, title: String, initial: List<String>, onDi
                     BookCover(vm.coverPath(b), b.title, b.author, b.coverColor, Modifier.height(56.dp), elevation = 3.dp)
                     Column(Modifier.weight(1f).padding(start = 14.dp)) {
                         Text(b.title, fontSize = 16.sp, color = g.text, maxLines = 2, overflow = TextOverflow.Ellipsis)
-                        Text(b.author, fontSize = 13.sp, color = g.text2, maxLines = 1)
+                        Text(b.author, fontSize = 14.sp, color = g.text2, maxLines = 1)
                     }
                     SelectMark(on)
                 }

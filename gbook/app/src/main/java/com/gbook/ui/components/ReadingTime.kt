@@ -121,7 +121,7 @@ fun ReadingStatsCard(log: Map<String, Long>, totalMs: Long, goalMin: Int, onClic
         Row(verticalAlignment = Alignment.Bottom) {
             Column(Modifier.weight(1f)) {
                 Row(verticalAlignment = Alignment.CenterVertically) {
-                    Text("READ TODAY", fontSize = 12.sp, fontWeight = FontWeight.SemiBold, letterSpacing = 1.2.sp, color = g.text2)
+                    Text("READ TODAY", fontSize = 13.sp, fontWeight = FontWeight.SemiBold, letterSpacing = 1.2.sp, color = g.text2)
                     Icon(Icons.AutoMirrored.Rounded.KeyboardArrowRight, "Reading activity", tint = g.text2, modifier = Modifier.size(18.dp))
                 }
                 Text(formatDuration(values.last()), fontFamily = DisplaySerif, fontWeight = FontWeight.Bold, fontSize = 30.sp, color = g.text)
@@ -141,8 +141,8 @@ fun ReadingStatsCard(log: Map<String, Long>, totalMs: Long, goalMin: Int, onClic
                             )
                         }
                         Text(
-                            d.dayOfWeek.getDisplayName(TextStyle.NARROW, Locale.getDefault()), fontSize = 11.sp,
-                            color = if (isToday) g.text else g.text2, fontWeight = if (isToday) FontWeight.Bold else FontWeight.Normal,
+                            d.dayOfWeek.getDisplayName(TextStyle.NARROW, Locale.getDefault()), fontSize = 12.sp,
+                            color = if (isToday) g.text else g.text2, fontWeight = if (isToday) FontWeight.Bold else FontWeight.Medium,
                             modifier = Modifier.padding(top = 4.dp),
                         )
                     }
@@ -163,7 +163,7 @@ private fun Stat(label: String, value: String, modifier: Modifier) {
     val g = LocalG.current
     Column(modifier) {
         Text(value, fontSize = 16.sp, fontWeight = FontWeight.SemiBold, color = g.text)
-        Text(label, fontSize = 12.sp, color = g.text2)
+        Text(label, fontSize = 13.sp, color = g.text2)
     }
 }
 
@@ -182,7 +182,7 @@ fun GoalProgress(todayMs: Long, goalMin: Int) {
                 val extra = (todayMs - goalMs) / 60_000
                 "Goal reached 🎉" + if (extra > 0) " · +$extra min" else ""
             } else "of $goalMin min goal",
-            fontSize = 12.sp, color = if (reached) g.accent else g.text2, fontWeight = if (reached) FontWeight.SemiBold else FontWeight.Normal,
+            fontSize = 13.sp, color = if (reached) g.accent else g.text2, fontWeight = if (reached) FontWeight.SemiBold else FontWeight.Medium,
             modifier = Modifier.padding(top = 4.dp),
         )
     }
@@ -215,7 +215,7 @@ fun GoalBanner(vm: AppViewModel, modifier: Modifier = Modifier) {
                 Text("Daily goal reached!", fontSize = 17.sp, fontWeight = FontWeight.SemiBold, color = g.text)
                 Text(
                     "${shown ?: 0} min today — keep going, the extra time counts too.",
-                    fontSize = 14.sp, color = g.text2,
+                    fontSize = 15.sp, color = g.text2,
                 )
             }
         }

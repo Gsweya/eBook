@@ -196,7 +196,7 @@ private fun ResultRow(
         Box(Modifier.width(44.dp), contentAlignment = Alignment.Center) { leading() }
         Column(Modifier.weight(1f).padding(start = 14.dp)) {
             Text(title, fontSize = 17.sp, color = g.text, maxLines = 2, overflow = TextOverflow.Ellipsis)
-            Text(subtitle, fontSize = 14.sp, color = g.text2, maxLines = 1, overflow = TextOverflow.Ellipsis)
+            Text(subtitle, fontSize = 15.sp, color = g.text2, maxLines = 1, overflow = TextOverflow.Ellipsis)
         }
     }
 }

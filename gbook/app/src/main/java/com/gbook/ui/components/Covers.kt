@@ -104,7 +104,7 @@ private fun GeneratedCover(title: String, author: String, color: Color) {
                 title, color = Color.White, fontFamily = DisplaySerif, fontWeight = FontWeight.Bold,
                 fontSize = 16.sp, lineHeight = 19.sp, textAlign = TextAlign.Center, maxLines = 5,
             )
-            Text(author, color = Color.White.copy(alpha = 0.8f), fontSize = 11.sp, textAlign = TextAlign.Center, modifier = Modifier.fillMaxWidth().padding(top = 8.dp), maxLines = 2)
+            Text(author, color = Color.White.copy(alpha = 0.8f), fontSize = 12.sp, textAlign = TextAlign.Center, modifier = Modifier.fillMaxWidth().padding(top = 8.dp), maxLines = 2)
         }
     }
 }

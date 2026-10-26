@@ -1,5 +1,6 @@
 package com.gbook.ui.screens
 
+import com.gbook.ui.components.plural
 import com.gbook.ui.components.bottomBarClearance
 import com.gbook.ui.components.bottomBarClearance
 import androidx.activity.compose.BackHandler
@@ -302,7 +303,7 @@ private fun LibraryTab(vm: AppViewModel, nav: Nav, onImport: () -> Unit, onScrol
                     BookCover(vm.coverPath(b), b.title, b.author, b.coverColor, Modifier.fillMaxWidth().graphicsLayer { scaleX = scale; scaleY = scale })
                     if (selecting) SelectMark(on, Modifier.align(Alignment.TopEnd).padding(6.dp))
                     else if (b.myReaction != null) {
-                        Text(b.myReaction, fontSize = 14.sp, modifier = Modifier.align(Alignment.TopEnd).padding(4.dp).panel(CircleShape, elevation = 2.dp).padding(4.dp))
+                        Text(b.myReaction, fontSize = 15.sp, modifier = Modifier.align(Alignment.TopEnd).padding(4.dp).panel(CircleShape, elevation = 2.dp).padding(4.dp))
                     }
                 }
                 Row(Modifier.fillMaxWidth().padding(top = 8.dp), verticalAlignment = Alignment.CenterVertically) {
@@ -312,12 +313,12 @@ private fun LibraryTab(vm: AppViewModel, nav: Nav, onImport: () -> Unit, onScrol
                         else -> "NEW"
                     }
                     Text(
-                        label, fontSize = 12.sp, fontWeight = FontWeight.Bold,
+                        label, fontSize = 13.sp, fontWeight = FontWeight.Bold,
                         color = if (label == "NEW") g.accent else g.text2,
                     )
                     if (b.format == BookFormat.PDF) {
                         Spacer(Modifier.width(6.dp))
-                        Text("PDF", fontSize = 10.sp, fontWeight = FontWeight.Bold, color = g.text2,
+                        Text("PDF", fontSize = 11.sp, fontWeight = FontWeight.Bold, color = g.text2,
                             modifier = Modifier.background(g.fill, RoundedCornerShape(4.dp)).padding(horizontal = 4.dp, vertical = 1.dp))
                     }
                     Spacer(Modifier.weight(1f))
@@ -351,12 +352,12 @@ private fun ContinueCard(vm: AppViewModel, b: Book, onClick: () -> Unit) {
         Spacer(Modifier.width(14.dp))
         Column(Modifier.weight(1f)) {
             Text(b.title, color = Color.White, fontFamily = DisplaySerif, fontWeight = FontWeight.Bold, fontSize = 18.sp, maxLines = 2, overflow = TextOverflow.Ellipsis)
-            Text(b.author, color = Color.White.copy(alpha = 0.8f), fontSize = 14.sp, maxLines = 1)
+            Text(b.author, color = Color.White.copy(alpha = 0.8f), fontSize = 15.sp, maxLines = 1)
             Spacer(Modifier.height(10.dp))
             Box(Modifier.fillMaxWidth().height(4.dp).clip(CircleShape).background(Color.White.copy(alpha = 0.25f))) {
                 Box(Modifier.fillMaxWidth(b.progress.coerceAtLeast(0.01f)).height(4.dp).background(Color.White))
             }
-            Text("${(b.progress * 100).toInt()}%" + (if (b.readingMs > 60_000) " · ${formatDuration(b.readingMs)} read" else "") + " · Tap to continue", color = Color.White.copy(alpha = 0.85f), fontSize = 12.sp, modifier = Modifier.padding(top = 6.dp))
+            Text("${(b.progress * 100).toInt()}%" + (if (b.readingMs > 60_000) " · ${formatDuration(b.readingMs)} read" else "") + " · Tap to continue", color = Color.White.copy(alpha = 0.85f), fontSize = 13.sp, modifier = Modifier.padding(top = 6.dp))
         }
     }
 }
@@ -384,7 +385,7 @@ private fun HighlightsTab(vm: AppViewModel, nav: Nav, onScrollDir: (Boolean) -> 
     LazyColumn(state = list, modifier = Modifier.fillMaxSize(), contentPadding = PaddingValues(bottom = bottomBarClearance())) {
         item {
             Box(Modifier.statusBarsPadding().padding(top = 48.dp)) {
-                LargeTitle("Highlights", "${data.highlights.size} saved across ${groups.size} books")
+                LargeTitle("Highlights", "${data.highlights.size} saved across ${plural(groups.size, "book")}")
             }
         }
         if (groups.isEmpty()) item {
@@ -397,7 +398,7 @@ private fun HighlightsTab(vm: AppViewModel, nav: Nav, onScrollDir: (Boolean) -> 
                     Spacer(Modifier.width(12.dp))
                     Column(Modifier.weight(1f)) {
                         Text(book.title, style = GType.navTitle, color = g.text, maxLines = 1, overflow = TextOverflow.Ellipsis)
-                        Text("${hs.size} highlights", style = GType.caption, color = g.text2)
+                        Text(plural(hs.size, "highlight"), style = GType.caption, color = g.text2)
                     }
                 }
             }

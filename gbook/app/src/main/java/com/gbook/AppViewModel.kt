@@ -10,6 +10,7 @@ import com.gbook.data.BookCollection
 import com.gbook.data.BookFormat
 import com.gbook.data.Highlight
 import com.gbook.data.Importer
+import com.gbook.data.PdfSupport
 import com.gbook.data.LibraryData
 import com.gbook.data.Post
 import com.gbook.data.PostGenerator
@@ -47,6 +48,10 @@ class AppViewModel(app: Application) : AndroidViewModel(app) {
             if (!store.data.value.starterAdded) importer.seedStarter()
             // Resume PDF text extraction that was interrupted by the process dying.
             store.data.value.books.filter { it.format == BookFormat.PDF && !it.textReady }.forEach { importer.extractPdf(it) }
+            // Re-extract PDFs converted by an older version, unless they have highlights anchored to that text.
+            val d = store.data.value
+            d.books.filter { b -> b.format == BookFormat.PDF && b.textReady && b.textVersion < PdfSupport.TEXT_VERSION && d.highlights.none { it.bookId == b.id } }
+                .forEach { importer.extractPdf(it) }
         }
         ReminderScheduler.ensureChannel(app)
         ReminderScheduler.sync(app, store.data.value.reminders)

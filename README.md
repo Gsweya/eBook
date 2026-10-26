@@ -46,7 +46,7 @@ An open-source Android eReader for EPUB and PDF, built with Kotlin and Jetpack C
 - **Reading tracker**: turn the wheel on the right edge to move a marker through the text word by word or sentence by sentence.
 - **Highlights** across paragraphs with drag handles, a lens loupe, and a marker or underline style.
 - **Feed** of posts built on-device from chapter key ideas, recap carousels and your highlights.
-- **PDF** page view with zoom, plus a reflowed text mode split by the PDF outline.
+- **PDF** page view with zoom, plus a reflowed text mode that reads like an EPUB: paragraphs, headings and named chapters are rebuilt from the page layout, and running headers and page numbers are dropped.
 - **Make it yours**: accent palettes, light/dark/system mode, pure black, two bottom-bar styles with a separate search button, symbol or Noto 3D emoji icons, and a profile picture.
 - **Google Drive** backup, restore and import through the system file picker.
 

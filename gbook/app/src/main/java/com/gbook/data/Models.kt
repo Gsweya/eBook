@@ -33,6 +33,8 @@ data class Book(
     val myReaction: String? = null,
     /** For PDFs: whether reflowable text has been extracted into content.json. */
     val textReady: Boolean = true,
+    /** For PDFs: the [PdfSupport.TEXT_VERSION] that produced the current text. */
+    val textVersion: Int = 0,
     val backedUpAt: Long = 0,
     /** Total active reading time in this book. */
     val readingMs: Long = 0,

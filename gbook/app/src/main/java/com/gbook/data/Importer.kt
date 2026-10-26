@@ -100,11 +100,28 @@ class Importer(private val ctx: Context, private val store: Store, private val s
         pdfProgress.value += book.id to 0f
         runCatching {
             PdfSupport.init(ctx)
+            // Text from an older extractor, re-extracted now: keep the reader's place by page.
+            val old = if (book.textReady) store.content(book.id) else null
             val c = PdfSupport.extract(store.bookFile(book)) { p -> pdfProgress.value += book.id to p }
             store.saveContent(book.id, c)
-            store.updateBook(book.id) { it.copy(textReady = true, chapterCount = c.chapters.size) }
+            store.updateBook(book.id) { b ->
+                b.copy(
+                    textReady = true, chapterCount = c.chapters.size, textVersion = PdfSupport.TEXT_VERSION,
+                    position = old?.let { remap(b.position, it, c) } ?: b.position,
+                )
+            }
         }
         pdfProgress.value -= book.id
+    }
+
+    /** Moves a reflow position from [old] text to the same PDF page in [new] text. */
+    private fun remap(pos: ReadingPosition, old: BookContent, new: BookContent): ReadingPosition {
+        val page = old.chapters.getOrNull(pos.chapter)?.blocks?.getOrNull(pos.item)?.page?.takeIf { it >= 0 } ?: return pos.copy(chapter = 0, item = 0, offset = 0)
+        new.chapters.forEachIndexed { ci, ch ->
+            val bi = ch.blocks.indexOfFirst { it.page >= page }
+            if (bi >= 0) return pos.copy(chapter = ci, item = bi, offset = 0)
+        }
+        return pos.copy(chapter = 0, item = 0, offset = 0)
     }
 
     private fun coverColor(f: File): Long = runCatching {

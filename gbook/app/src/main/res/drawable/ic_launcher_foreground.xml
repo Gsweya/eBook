@@ -1,0 +1,9 @@
+<?xml version="1.0" encoding="utf-8"?>
+<!-- Launcher icon foreground: the open-book glyph, centred in the 72dp visible area of the 108dp canvas. -->
+<vector xmlns:android="http://schemas.android.com/apk/res/android"
+    android:width="108dp" android:height="108dp" android:viewportWidth="108" android:viewportHeight="108">
+    <group android:scaleX="1.5625" android:scaleY="1.5625" android:translateX="35.25" android:translateY="35.25">
+        <path android:fillColor="#FFFFFF"
+            android:pathData="M12,6.5C10.4,5.3 8.2,4.8 6,4.8C4.9,4.8 3.8,5 3,5.3V19C3.8,18.7 4.9,18.5 6,18.5C8.2,18.5 10.4,19 12,20.2C13.6,19 15.8,18.5 18,18.5C19.1,18.5 20.2,18.7 21,19V5.3C20.2,5 19.1,4.8 18,4.8C15.8,4.8 13.6,5.3 12,6.5ZM11,17.6C9.5,16.9 7.8,16.6 6,16.6C5.7,16.6 5.3,16.6 5,16.7V6.8C5.3,6.8 5.7,6.7 6,6.7C7.8,6.7 9.6,7.2 11,8V17.6Z" />
+    </group>
+</vector>

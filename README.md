@@ -42,7 +42,7 @@ An open-source Android eReader for EPUB and PDF, built with Kotlin and Jetpack C
 - **Reading time**: today's minutes, a 7-day chart, streak and all-time totals, plus time spent in each book.
 - **Reader** with ten open-licence reading fonts (including Libre Baskerville), text size buttons and pinch-to-resize, page themes, line spacing, adjustable margins, contents and search.
 - **Scroll or turn pages**: scroll through a whole chapter, or read one page at a time and tap or swipe to turn. Both show the page number, pages left in the chapter and a progress line.
-- **Reading tracker**: slide a finger along the right edge to move a marker through the text word by word or sentence by sentence.
+- **Reading tracker**: turn the wheel on the right edge to move a marker through the text word by word or sentence by sentence.
 - **Highlights** across paragraphs with drag handles, a lens loupe, and a marker or underline style.
 - **Feed** of posts built on-device from chapter key ideas, recap carousels and your highlights.
 - **PDF** page view with zoom, plus a reflowed text mode split by the PDF outline.

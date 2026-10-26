@@ -387,17 +387,19 @@ private fun ReaderContent(
     fun contentBottom() = viewport.height - with(density) { bottomPad.toPx() }
     fun pageH() = (contentBottom() - contentTop()).coerceAtLeast(1f)
     fun lineH() = with(density) { (s.fontSize * s.lineHeight).sp.toPx() }
+    // With the tracker on, the right margin widens so the wheel never covers the text.
+    val endMargin = if (s.tracker) maxOf(s.margin, TrackerClearance) else s.margin
 
     // Estimated page layout for "page N of M"; recomputed (after a short pause) whenever the text settings change.
     val fontResolver = LocalFontFamilyResolver.current
-    val pageMap by produceState<PageMap?>(null, chapters, s.fontSize, s.lineHeight, s.font, weight, s.justify, s.margin, viewport, paged) {
+    val pageMap by produceState<PageMap?>(null, chapters, s.fontSize, s.lineHeight, s.font, weight, s.justify, s.margin, endMargin, viewport, paged) {
         if (viewport.height == 0) return@produceState
         delay(250)
         val bodyFace = fontResolver.resolve(family, weight).value as? android.graphics.Typeface ?: android.graphics.Typeface.SERIF
         val boldFace = fontResolver.resolve(family, FontWeight.Bold).value as? android.graphics.Typeface ?: android.graphics.Typeface.DEFAULT_BOLD
         val m = with(density) {
             PageMetrics(
-                width = viewport.width - 2 * s.margin.dp.roundToPx(), pageH = pageH(), textPx = s.fontSize.sp.toPx(),
+                width = viewport.width - s.margin.dp.roundToPx() - endMargin.dp.roundToPx(), pageH = pageH(), textPx = s.fontSize.sp.toPx(),
                 lineHeightPx = lineH(), indentPx = (s.fontSize * 1.4f).sp.roundToPx(), paraGapPx = (s.fontSize * 0.45f).dp.toPx(),
                 justify = s.justify, body = bodyFace, bold = boldFace, dp = density.density,
             )
@@ -510,13 +512,13 @@ private fun ReaderContent(
         if (paged) { withFrameNanos { }; alignTop(forward = j < 0) }
     }
     // Page mode starts each page on a whole line, including after the text is restyled.
-    LaunchedEffect(paged, chapter, s.fontSize, s.lineHeight, s.margin, s.font, weight, viewport) {
+    LaunchedEffect(paged, chapter, s.fontSize, s.lineHeight, s.margin, endMargin, s.font, weight, viewport) {
         if (!paged) return@LaunchedEffect
         withFrameNanos { }; withFrameNanos { }
         alignTop(forward = false)
     }
 
-    // Reading tracker: a marker stepped word by word (or sentence by sentence) by sliding along the side rail.
+    // Reading tracker: a marker stepped word by word (or sentence by sentence) by turning the wheel on the right edge.
     var track by remember(chapter) { mutableStateOf<Track?>(null) }
     val unitCache = remember(chapter, s.trackerUnit) { HashMap<Int, List<IntRange>>() }
     fun units(b: Int) = unitCache.getOrPut(b) { ch.blocks[b].takeIf { it.type == 0 }?.let { trackerUnits(it.text, s.trackerUnit == 1) }.orEmpty() }
@@ -692,7 +694,7 @@ private fun ReaderContent(
                             onDragEnd = { if (kotlin.math.abs(dx) > 48.dp.toPx()) turnPage(dx < 0) },
                         ) { c, d -> dx += d; c.consume() }
                     },
-                contentPadding = PaddingValues(start = s.margin.dp, end = s.margin.dp, top = topPad, bottom = bottomPad),
+                contentPadding = PaddingValues(start = s.margin.dp, end = endMargin.dp, top = topPad, bottom = bottomPad),
             ) {
                 itemsIndexed(ch.blocks, key = { i, _ -> "$chapter-$i" }) { i, b ->
                     when (b.type) {
@@ -775,11 +777,11 @@ private fun ReaderContent(
             Box(Modifier.fillMaxWidth().height(top + 64.dp).background(Brush.verticalGradient(0f to page, 0.72f to page, 1f to page.copy(alpha = 0f))))
             Box(Modifier.align(Alignment.BottomCenter).fillMaxWidth().height(bottom + 92.dp).background(Brush.verticalGradient(0f to page.copy(alpha = 0f), 0.4f to page, 1f to page)))
         }
-        if (s.tracker) TrackerRail(
-            stepPx = with(density) { (if (s.trackerUnit == 1) 44.dp else 18.dp).toPx() },
-            ink = ink, accent = g.accent,
+        if (s.tracker) TrackerWheel(
+            stepPx = with(density) { (if (s.trackerUnit == 1) 40.dp else 16.dp).toPx() },
+            ink = ink, page = page, accent = g.accent,
             onStep = { fwd -> if (stepTrack(fwd)) haptics.tick() },
-            modifier = Modifier.align(Alignment.TopEnd).padding(top = topPad, bottom = bottomPad).fillMaxHeight().width(32.dp),
+            modifier = Modifier.align(Alignment.CenterEnd).padding(end = 4.dp),
         )
         if (sel != null) for (isStart in listOf(true, false)) {
             SelectionHandle(
@@ -1200,43 +1202,84 @@ private fun ProgressLine(fraction: Float, ink: Color) {
     }
 }
 
+/** Right margin (dp) the reader keeps clear for the tracker wheel. */
+private const val TrackerClearance = 46
+
 /**
- * Side rail for the reading tracker: sliding a finger down it steps the marker forward one word or sentence
- * every [stepPx], sliding up steps back, and a tap steps forward once.
+ * The reading tracker's wheel: a fixed dial on the right edge, drawn as a cylinder seen edge-on. Turning it
+ * down (dragging the ridges) steps the marker forward one word or sentence every [stepPx], turning it up steps
+ * back, and a tap steps forward once. Lift and turn again to keep going, like a scroll wheel.
  */
 @Composable
-private fun TrackerRail(stepPx: Float, ink: Color, accent: Color, onStep: (Boolean) -> Unit, modifier: Modifier) {
-    var knob by remember { mutableStateOf<Float?>(null) }
+private fun TrackerWheel(stepPx: Float, ink: Color, page: Color, accent: Color, onStep: (Boolean) -> Unit, modifier: Modifier) {
+    // Total distance turned, in px of wheel surface; drives where the ridges are drawn.
+    var turned by remember { mutableFloatStateOf(0f) }
+    var held by remember { mutableStateOf(false) }
     val step by rememberUpdatedState(onStep)
+    val shape = RoundedCornerShape(50)
     Box(
         modifier
+            .size(width = 52.dp, height = 240.dp)
             .pointerInput(stepPx) {
                 awaitEachGesture {
                     val down = awaitFirstDown()
                     down.consume()
-                    knob = down.position.y
+                    held = true
                     var acc = 0f
                     var moved = false
                     try {
                         while (true) {
                             val c = awaitPointerEvent().changes.firstOrNull { it.id == down.id } ?: break
                             if (!c.pressed) { c.consume(); break }
-                            acc += c.position.y - c.previousPosition.y
-                            knob = c.position.y.coerceIn(0f, size.height.toFloat())
+                            val dy = c.position.y - c.previousPosition.y
+                            acc += dy
+                            turned += dy
                             while (acc >= stepPx) { acc -= stepPx; step(true); moved = true }
                             while (acc <= -stepPx) { acc += stepPx; step(false); moved = true }
                             c.consume()
                         }
-                        if (!moved) step(true)
-                    } finally { knob = null }
+                        if (!moved) { step(true); turned += stepPx }
+                    } finally { held = false }
                 }
-            }
-            .drawBehind {
-                val x = size.width - 7.dp.toPx()
-                drawLine(ink.copy(alpha = 0.13f), Offset(x, 0f), Offset(x, size.height), 3.dp.toPx(), StrokeCap.Round)
-                knob?.let { y -> drawLine(accent, Offset(x, y - 20.dp.toPx()), Offset(x, y + 20.dp.toPx()), 6.dp.toPx(), StrokeCap.Round) }
             },
-    )
+        contentAlignment = Alignment.CenterEnd,
+    ) {
+        Box(
+            Modifier
+                .size(width = 36.dp, height = 220.dp)
+                .shadow(if (held) 10.dp else 4.dp, shape, ambientColor = ink, spotColor = ink)
+                .clip(shape)
+                .background(page)
+                .drawBehind {
+                    val r = size.height / 2f - 10.dp.toPx()
+                    val cy = size.height / 2f
+                    // Shade the ends so the dial reads as a cylinder.
+                    drawRect(Brush.verticalGradient(0f to ink.copy(alpha = 0.10f), 0.3f to ink.copy(alpha = 0.02f), 0.7f to ink.copy(alpha = 0.02f), 1f to ink.copy(alpha = 0.10f)))
+                    // Ridges every 12°, moving with the turn. A ridge at angle a sits at cy + r·sin(a), and
+                    // gets thinner and fainter towards the edges, where the surface turns away.
+                    val gap = Math.toRadians(12.0).toFloat()
+                    val phase = (turned / r) % gap
+                    var a = -Math.PI.toFloat() / 2f + phase - gap
+                    while (a < Math.PI / 2) {
+                        if (a > -Math.PI / 2) {
+                            val depth = kotlin.math.cos(a)
+                            val y = cy + r * kotlin.math.sin(a)
+                            val inset = 9.dp.toPx() + (1f - depth) * 4.dp.toPx()
+                            drawLine(
+                                ink.copy(alpha = 0.08f + 0.32f * depth),
+                                Offset(inset, y), Offset(size.width - inset, y),
+                                (1.dp.toPx() + 1.5.dp.toPx() * depth), StrokeCap.Round,
+                            )
+                        }
+                        a += gap
+                    }
+                    // Centre notch: where the marker "reads" from.
+                    drawLine(accent.copy(alpha = if (held) 1f else 0.75f), Offset(3.dp.toPx(), cy), Offset(7.dp.toPx(), cy), 3.dp.toPx(), StrokeCap.Round)
+                    drawLine(accent.copy(alpha = if (held) 1f else 0.75f), Offset(size.width - 7.dp.toPx(), cy), Offset(size.width - 3.dp.toPx(), cy), 3.dp.toPx(), StrokeCap.Round)
+                }
+                .border(1.dp, ink.copy(alpha = if (held) 0.22f else 0.12f), shape),
+        )
+    }
 }
 
 @Composable
@@ -1690,7 +1733,7 @@ fun PageModeControl(mode: Int, onChange: (Int) -> Unit) {
 @Composable
 fun TrackerOptions(s: ReaderSettings, vm: AppViewModel) {
     val g = LocalG.current
-    OptionRow("Reading tracker", "Slide along the right edge to move a marker through the text", s.tracker) { on -> vm.updateSettings { it.copy(tracker = on) } }
+    OptionRow("Reading tracker", "Turn the wheel on the right edge to move a marker through the text", s.tracker) { on -> vm.updateSettings { it.copy(tracker = on) } }
     if (s.tracker) Row(Modifier.fillMaxWidth().padding(horizontal = 20.dp, vertical = 10.dp), verticalAlignment = Alignment.CenterVertically) {
         Text("Track by", fontSize = 17.sp, color = g.text, modifier = Modifier.weight(1f))
         Segmented(listOf("Word", "Sentence"), s.trackerUnit, { i -> vm.updateSettings { it.copy(trackerUnit = i) } })

@@ -863,7 +863,9 @@ private fun ReaderContent(
                     PillButton(ch.title, { contentsTab = 0 }, Modifier.widthIn(max = 240.dp), height = 44.dp)
                 }
                 Spacer(Modifier.width(8.dp))
-                modeToggle?.invoke()
+                modeToggle?.let { it(); Spacer(Modifier.width(8.dp)) }
+                // Opposite the back button: contents, highlights, search, sharing and every text setting.
+                IconCircle(Icons.Rounded.Tune, "Reading options", { showSettings = true }, size = 44.dp)
             }
         }
         AnimatedVisibility(
@@ -887,8 +889,6 @@ private fun ReaderContent(
                         CapsuleDivider()
                         CapsuleSegment({ changeFont(1f) }, enabled = s.fontSize < MAX_FONT) { Text("A", fontSize = 26.sp, color = g.text, fontWeight = FontWeight.Medium) }
                     }
-                    Spacer(Modifier.width(10.dp))
-                    IconCircle(Icons.Rounded.Tune, "Reading options", { showSettings = true }, size = 52.dp)
                     Spacer(Modifier.weight(1f))
                     IconCircle(Icons.Rounded.ChevronRight, "Next chapter", { goTo(chapter + 1) }, size = 52.dp, enabled = chapter < chapters.lastIndex)
                 }

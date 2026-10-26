@@ -69,7 +69,40 @@ internal class WordCollector(private val onPageDone: (Int) -> Unit) : PDFTextStr
             cur += w
         }
         if (cur.isNotEmpty()) out += PdfLine(cur[0].page, cur)
-        return out
+        return attachSuperscripts(out)
+    }
+
+    /**
+     * Folds superscripts (ordinals like the "rd" of 33rd, footnote marks) into the line they're raised above.
+     * Set smaller and higher, they otherwise come out as a line of their own, which then breaks the paragraph.
+     */
+    private fun attachSuperscripts(lines: List<PdfLine>): List<PdfLine> {
+        val out = lines.toMutableList()
+        val gone = HashSet<Int>()
+        for ((i, sup) in lines.withIndex()) {
+            if (sup.words.size > 4 || sup.words.any { it.text.length > 4 }) continue
+            val host = (maxOf(0, i - 2)..minOf(lines.lastIndex, i + 2)).firstOrNull { j ->
+                val h = lines[j]
+                j != i && j !in gone && h.page == sup.page && h.words.size > sup.words.size && sup.size < h.size * 0.85f &&
+                    h.y - sup.y > 0 && h.y - sup.y < h.size * 0.75f && sup.x0 >= h.x0 - 1f && sup.x1 <= h.x1 + h.size
+            } ?: continue
+            out[host] = PdfLine(sup.page, out[host].words.withSuperscripts(sup.words))
+            gone += i
+        }
+        return out.filterIndexed { i, _ -> i !in gone }
+    }
+
+    /** These words with [sups] glued onto the words they follow (or placed after them if there's a gap). */
+    private fun List<PdfWord>.withSuperscripts(sups: List<PdfWord>): List<PdfWord> {
+        val ws = toMutableList()
+        for (s in sups) {
+            val k = ws.indexOfLast { it.x1 <= s.x0 + 0.5f }
+            if (k < 0) { ws.add(0, s); continue }
+            val w = ws[k]
+            if (s.x0 - w.x1 < w.size * 0.3f) ws[k] = PdfWord(w.page, w.text + s.text, w.x0, s.x1, w.y, w.size, w.bold)
+            else ws.add(k + 1, s)
+        }
+        return ws
     }
 
     private fun ligatures(s: String) = s

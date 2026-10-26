@@ -37,7 +37,7 @@ object PdfSupport {
     }.getOrDefault("" to "")
 
     /** Bumped when extraction improves, so PDFs converted by an older version are converted again. */
-    const val TEXT_VERSION = 2
+    const val TEXT_VERSION = 3
 
     /**
      * Extracts reflowable text like an EPUB: paragraphs rebuilt from indents and spacing, headings found by font

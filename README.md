@@ -35,6 +35,7 @@ An open-source Android eReader for EPUB and PDF, built with Kotlin and Jetpack C
 
 ## Features
 
+- **Starts with a free book**: *Fractured Minds* by Galanda J. Sweya ships with the app, so there's something to read right away.
 - **Library** of EPUB and PDF books with covers, progress and reactions; add several books at once with the **+** button.
 - **Collections**: select books and group them into named collections.
 - **Search** tab for books, authors, collections and highlights.

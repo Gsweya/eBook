@@ -12,6 +12,8 @@ import java.io.File
 import java.io.InputStream
 import java.security.MessageDigest
 
+private const val STARTER_BOOK = "starter/Fractured Minds.pdf"
+
 private val SMALL_WORDS = setOf("a", "an", "and", "as", "at", "but", "by", "for", "in", "of", "on", "or", "the", "to", "vs")
 
 class Importer(private val ctx: Context, private val store: Store, private val scope: CoroutineScope) {
@@ -30,6 +32,16 @@ class Importer(private val ctx: Context, private val store: Store, private val s
         val names = ctx.assets.list("").orEmpty().filter { it.endsWith(".epub") || it.endsWith(".pdf") }
         for (n in names) runCatching { importStream(n) { ctx.assets.open(n) } }
         store.update { it.copy(seeded = true) }
+    }
+
+    /** Adds the starter book that ships with every build: the author's own "Fractured Minds", free to read. */
+    suspend fun seedStarter() {
+        runCatching {
+            val b = importStream(STARTER_BOOK.substringAfterLast('/')) { ctx.assets.open(STARTER_BOOK) }
+            // The PDF has no title and a short author name in its metadata.
+            store.updateBook(b.id) { it.copy(title = "Fractured Minds", author = "Galanda J. Sweya") }
+        }
+        store.update { it.copy(starterAdded = true) }
     }
 
     suspend fun importStream(displayName: String, open: () -> InputStream): Book = withContext(Dispatchers.IO) {

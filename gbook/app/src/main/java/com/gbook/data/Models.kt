@@ -134,6 +134,8 @@ data class LibraryData(
     val posts: List<Post> = emptyList(),
     val settings: ReaderSettings = ReaderSettings(),
     val seeded: Boolean = false,
+    /** Whether the free starter book has been added (once, for new and updating users alike). */
+    val starterAdded: Boolean = false,
     val lastBackupAt: Long = 0,
     /** Active reading time per local day ("yyyy-MM-dd"), across all books. */
     val readingLog: Map<String, Long> = emptyMap(),

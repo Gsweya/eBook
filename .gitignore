@@ -4,6 +4,8 @@ sample_books/
 *.zip
 *.epub
 *.pdf
+# ...except the author's own starter book, which ships with the app
+!gbook/app/src/main/assets/starter/*.pdf
 
 # Build output and IDE files
 .gradle/

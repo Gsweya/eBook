@@ -44,6 +44,7 @@ class AppViewModel(app: Application) : AndroidViewModel(app) {
                 runCatching { importer.seedSamples() }
                 busy.value = null
             }
+            if (!store.data.value.starterAdded) importer.seedStarter()
             // Resume PDF text extraction that was interrupted by the process dying.
             store.data.value.books.filter { it.format == BookFormat.PDF && !it.textReady }.forEach { importer.extractPdf(it) }
         }

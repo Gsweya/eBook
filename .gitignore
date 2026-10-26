@@ -1,0 +1,15 @@
+# Copyrighted reference material and books — keep local only
+refs/
+sample_books/
+*.zip
+*.epub
+*.pdf
+
+# Build output and IDE files
+.gradle/
+.kotlin/
+build/
+local.properties
+*.iml
+.idea/
+.DS_Store

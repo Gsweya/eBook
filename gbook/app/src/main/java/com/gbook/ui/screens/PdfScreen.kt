@@ -77,6 +77,7 @@ import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import com.gbook.AppViewModel
+import com.gbook.data.Book
 import com.gbook.data.BookContent
 import com.gbook.data.ReadingPosition
 import com.gbook.ui.components.CapsuleDivider
@@ -125,14 +126,14 @@ private class PdfDoc(file: File) {
 }
 
 @Composable
-fun PdfScreen(vm: AppViewModel, id: String, onBack: () -> Unit) {
+fun PdfScreen(vm: AppViewModel, id: String, onBack: () -> Unit, onOpenBook: (Book) -> Unit) {
     val data by vm.data.collectAsState()
     val book = data.books.firstOrNull { it.id == id } ?: return
     var textMode by rememberSaveable { mutableStateOf(false) }
     val progress by vm.importer.pdfProgress.collectAsState()
 
     if (textMode) {
-        ReaderScreen(vm, id, null, null, onBack, modeToggle = {
+        ReaderScreen(vm, id, null, null, onBack, onOpenBook, modeToggle = {
             IconCircle(Icons.Rounded.Description, "Original pages", { textMode = false }, size = 44.dp)
         })
         return

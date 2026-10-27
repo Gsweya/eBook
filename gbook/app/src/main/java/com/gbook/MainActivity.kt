@@ -126,6 +126,8 @@ fun App(vm: AppViewModel, pendingOpen: MutableStateFlow<Uri?>, pendingBook: Muta
         }
     }
     BackHandler(stack.size > 1) { nav.pop() }
+    // From inside a book: swap it for another rather than stacking readers.
+    val switchBook: (Book) -> Unit = { b -> vm.markOpened(b.id); nav.pop(); nav.open(b) }
 
     Box(Modifier.fillMaxSize().background(g.bg)) {
         AnimatedContent(
@@ -137,8 +139,8 @@ fun App(vm: AppViewModel, pendingOpen: MutableStateFlow<Uri?>, pendingBook: Muta
                 when (route) {
                     Route.Home -> HomeScreen(vm, nav)
                     is Route.Highlights -> BookHighlightsScreen(vm, route.id, nav)
-                    is Route.Reader -> ReaderScreen(vm, route.id, route.chapter, route.block, onBack = nav.pop)
-                    is Route.Pdf -> PdfScreen(vm, route.id, onBack = nav.pop)
+                    is Route.Reader -> ReaderScreen(vm, route.id, route.chapter, route.block, onBack = nav.pop, onOpenBook = switchBook)
+                    is Route.Pdf -> PdfScreen(vm, route.id, onBack = nav.pop, onOpenBook = switchBook)
                     is Route.Collection -> CollectionScreen(vm, route.id, nav)
                 }
             }

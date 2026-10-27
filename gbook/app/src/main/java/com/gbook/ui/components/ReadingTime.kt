@@ -20,6 +20,7 @@ import androidx.compose.material3.Icon
 import androidx.compose.foundation.border
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
+import androidx.compose.foundation.layout.BoxScope
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.Spacer
@@ -36,6 +37,12 @@ import androidx.compose.runtime.remember
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
+import androidx.compose.ui.draw.drawBehind
+import androidx.compose.ui.geometry.Offset
+import androidx.compose.ui.geometry.Size
+import androidx.compose.ui.graphics.StrokeCap
+import androidx.compose.ui.graphics.drawscope.Stroke
+import androidx.compose.ui.unit.Dp
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
@@ -186,6 +193,26 @@ fun GoalProgress(todayMs: Long, goalMin: Int) {
         )
     }
 }
+
+/** [content] inside a ring that fills clockwise from the top with [fraction] of the daily goal. */
+@Composable
+fun GoalRing(fraction: Float, stroke: Dp, modifier: Modifier = Modifier, content: @Composable BoxScope.() -> Unit) {
+    val g = LocalG.current
+    Box(
+        modifier.drawBehind {
+            val w = stroke.toPx()
+            val topLeft = Offset(w / 2, w / 2)
+            val arc = Size(size.width - w, size.height - w)
+            drawArc(g.fill, 0f, 360f, false, topLeft, arc, style = Stroke(w))
+            if (fraction > 0f) drawArc(g.accentBrush, -90f, 360f * fraction.coerceAtMost(1f), false, topLeft, arc, style = Stroke(w, cap = StrokeCap.Round))
+        },
+        contentAlignment = Alignment.Center,
+        content = content,
+    )
+}
+
+/** Today's reading time from [log], in milliseconds. */
+fun todayMs(log: Map<String, Long>): Long = log[LocalDate.now().toString()] ?: 0L
 
 /** Celebrates reaching the daily goal while reading, then gets out of the way so reading can continue. */
 @Composable

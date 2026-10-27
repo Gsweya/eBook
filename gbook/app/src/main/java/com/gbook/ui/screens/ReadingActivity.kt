@@ -36,12 +36,69 @@ import com.gbook.data.Book
 import com.gbook.ui.components.BookCover
 import com.gbook.ui.components.GSheet
 import com.gbook.ui.components.formatDuration
+import androidx.compose.foundation.layout.size
+import androidx.compose.material.icons.Icons
+import androidx.compose.material.icons.automirrored.rounded.KeyboardArrowRight
+import androidx.compose.material.icons.rounded.Flag
+import androidx.compose.material3.Icon
+import com.gbook.ui.components.Avatar
+import com.gbook.ui.components.GoalRing
+import com.gbook.ui.components.PillButton
+import com.gbook.ui.components.todayMs
+import com.gbook.ui.theme.GType
 import com.gbook.ui.theme.DisplaySerif
 import com.gbook.ui.theme.LocalG
 import java.time.LocalDate
 import java.time.format.DateTimeFormatter
 import java.time.format.TextStyle
 import java.util.Locale
+
+/**
+ * Opened from the reader's profile ring: today's reading against the daily goal, time this sitting, and the open
+ * book's reading plan, with a way through to the full reading activity.
+ */
+@Composable
+fun TodaySheet(vm: AppViewModel, book: Book, sessionMs: Long, onPlan: () -> Unit, onAllActivity: () -> Unit, onDismiss: () -> Unit) {
+    val g = LocalG.current
+    val data by vm.data.collectAsState()
+    val today = todayMs(data.readingLog)
+    val goalMin = data.settings.dailyGoalMin
+    val goalMs = goalMin * 60_000L
+    val plan = data.plans.firstOrNull { it.bookId == book.id }
+    GSheet(onDismiss, "Today") {
+        Column(Modifier.padding(horizontal = 20.dp).padding(bottom = 24.dp)) {
+            Row(verticalAlignment = Alignment.CenterVertically) {
+                GoalRing(if (goalMs > 0) today.toFloat() / goalMs else 0f, 7.dp, Modifier.size(104.dp)) {
+                    Avatar(vm.avatarFile, data.settings.avatarVersion, data.settings.profileName, 78.dp)
+                }
+                Spacer(Modifier.width(20.dp))
+                Column {
+                    Text(formatDuration(today), fontFamily = DisplaySerif, fontWeight = FontWeight.Bold, fontSize = 34.sp, color = g.text)
+                    val reached = goalMs > 0 && today >= goalMs
+                    Text(
+                        when {
+                            goalMs <= 0 -> "read today"
+                            reached -> "Goal reached 🎉" + ((today - goalMs) / 60_000).let { if (it > 0) " · +$it min" else "" }
+                            else -> "${((goalMs - today + 59_999) / 60_000)} min to go · $goalMin min goal"
+                        },
+                        fontSize = 15.sp, color = if (reached) g.accent else g.text2, fontWeight = if (reached) FontWeight.SemiBold else FontWeight.Medium,
+                    )
+                    Text("${formatDuration(sessionMs)} this sitting", fontSize = 15.sp, color = g.text2, modifier = Modifier.padding(top = 2.dp))
+                }
+            }
+            Text("READING PLAN", style = GType.eyebrow, color = g.text2, modifier = Modifier.padding(top = 26.dp, bottom = 10.dp))
+            if (plan != null) PlanCard(vm, plan, book, onClick = onPlan)
+            else PillButton("Set a reading plan for this book", onPlan, Modifier.fillMaxWidth(), icon = Icons.Rounded.Flag)
+            Row(
+                Modifier.padding(top = 16.dp).fillMaxWidth().clip(RoundedCornerShape(18.dp)).clickable(onClick = onAllActivity).padding(vertical = 12.dp, horizontal = 4.dp),
+                verticalAlignment = Alignment.CenterVertically,
+            ) {
+                Text("All reading activity", fontSize = 16.sp, fontWeight = FontWeight.SemiBold, color = g.text, modifier = Modifier.weight(1f))
+                Icon(Icons.AutoMirrored.Rounded.KeyboardArrowRight, null, tint = g.text2)
+            }
+        }
+    }
+}
 
 /** Reading time over the last 7 or 30 days (or all time) and the books read most in that period. */
 @Composable

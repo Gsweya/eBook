@@ -41,7 +41,7 @@ import androidx.compose.ui.graphics.rememberGraphicsLayer
 import androidx.compose.ui.graphics.drawscope.translate
 import androidx.compose.ui.graphics.drawscope.scale
 import androidx.compose.ui.unit.IntOffset
-import androidx.compose.material.icons.rounded.Tune
+import androidx.compose.material.icons.rounded.MoreHoriz
 import androidx.compose.material.icons.rounded.Close
 import androidx.compose.foundation.layout.offset
 import androidx.compose.foundation.layout.BoxWithConstraints
@@ -186,6 +186,11 @@ import com.gbook.data.Highlight
 import com.gbook.data.ReaderSettings
 import com.gbook.data.ReadingPosition
 import com.gbook.ui.components.BookCover
+import androidx.compose.ui.semantics.contentDescription
+import androidx.compose.ui.semantics.semantics
+import com.gbook.ui.components.Avatar
+import com.gbook.ui.components.GoalRing
+import com.gbook.ui.components.todayMs
 import com.gbook.ui.components.CapsuleDivider
 import com.gbook.ui.components.CapsuleSegment
 import com.gbook.ui.components.GSheet
@@ -262,6 +267,8 @@ fun ReaderScreen(
     startChapter: Int?,
     startBlock: Int?,
     onBack: () -> Unit,
+    /** Leaves this book for another, e.g. one picked from reading activity. */
+    onOpenBook: (Book) -> Unit,
     modeToggle: (@Composable () -> Unit)? = null,
 ) {
     val data by vm.data.collectAsState()
@@ -288,7 +295,7 @@ fun ReaderScreen(
         }
         return
     }
-    ReaderContent(vm, book, c.chapters, data.settings, data.highlights, startChapter, startBlock, onBack, modeToggle, page, ink, dark)
+    ReaderContent(vm, book, c.chapters, data.settings, data.highlights, startChapter, startBlock, onBack, onOpenBook, modeToggle, page, ink, dark)
 }
 
 @OptIn(FlowPreview::class)
@@ -302,6 +309,7 @@ private fun ReaderContent(
     startChapter: Int?,
     startBlock: Int?,
     onBack: () -> Unit,
+    onOpenBook: (Book) -> Unit,
     modeToggle: (@Composable () -> Unit)?,
     page: Color,
     ink: Color,
@@ -310,6 +318,9 @@ private fun ReaderContent(
     val g = LocalG.current
     val ctx = LocalContext.current
     val clipboard = LocalClipboardManager.current
+    val readingLog = vm.data.collectAsState().value.readingLog
+    // Time read since this book was opened; reading time is saved every half minute or so.
+    val sessionStartMs = remember(book.id) { book.readingMs }
     val haptics = rememberHaptics()
     val density = LocalDensity.current
     val scope = rememberCoroutineScope()
@@ -337,6 +348,10 @@ private fun ReaderContent(
     var activeHl by remember { mutableStateOf<Highlight?>(null) }
     var noteFor by remember { mutableStateOf<Highlight?>(null) }
     var showSettings by remember { mutableStateOf(false) }
+    var showText by remember { mutableStateOf(false) }
+    var showToday by remember { mutableStateOf(false) }
+    var showActivity by remember { mutableStateOf(false) }
+    var showPlan by remember { mutableStateOf(false) }
     var contentsTab by remember { mutableStateOf<Int?>(null) }
     var showSearch by remember { mutableStateOf(false) }
     var showGenerate by remember { mutableStateOf(false) }
@@ -720,8 +735,9 @@ private fun ReaderContent(
                 state = listState,
                 userScrollEnabled = !paged,
                 modifier = Modifier.fillMaxSize()
-                    .pointerInput(paged) { detectTapGestures(onTap = { onPageTap(it.x) }) }
-                    .pointerInput(paged) {
+                    // Keyed on the chapter too: the handlers turn this chapter's list, which is replaced on every chapter change.
+                    .pointerInput(paged, chapter) { detectTapGestures(onTap = { onPageTap(it.x) }) }
+                    .pointerInput(paged, chapter) {
                         if (!paged) return@pointerInput
                         var dx = 0f
                         detectHorizontalDragGestures(
@@ -887,8 +903,12 @@ private fun ReaderContent(
                 }
                 Spacer(Modifier.width(8.dp))
                 modeToggle?.let { it(); Spacer(Modifier.width(8.dp)) }
-                // Opposite the back button: contents, highlights, search, sharing and every text setting.
-                IconCircle(Icons.Rounded.Tune, "Reading options", { showSettings = true }, size = 44.dp)
+                // Opposite the back button: the reader, ringed with today's progress toward the daily goal.
+                GoalRing(
+                    if (s.dailyGoalMin > 0) todayMs(readingLog).toFloat() / (s.dailyGoalMin * 60_000L) else 0f, 3.dp,
+                    Modifier.size(44.dp).panel(CircleShape).clip(CircleShape).clickable { showToday = true }
+                        .semantics { contentDescription = "Today's reading" },
+                ) { Avatar(vm.avatarFile, s.avatarVersion, s.profileName, 34.dp) }
             }
         }
         AnimatedVisibility(
@@ -905,12 +925,17 @@ private fun ReaderContent(
                 Row(verticalAlignment = Alignment.CenterVertically) {
                     IconCircle(Icons.Rounded.ChevronLeft, "Previous chapter", { goTo(chapter - 1) }, size = 52.dp, enabled = chapter > 0)
                     Spacer(Modifier.weight(1f))
+                    // Search, text settings, contents and the rest of the reading options.
                     SegmentCapsule(height = 52.dp) {
-                        CapsuleSegment({ changeFont(-1f) }, enabled = s.fontSize > MIN_FONT) { Text("A", fontSize = 16.sp, color = g.text, fontWeight = FontWeight.Medium) }
+                        CapsuleSegment({ showSearch = true }) { Icon(Icons.Rounded.Search, "Search", tint = g.text, modifier = Modifier.size(22.dp)) }
                         CapsuleDivider()
-                        Text("${s.fontSize.toInt()}", fontSize = 16.sp, color = g.text2, modifier = Modifier.padding(horizontal = 12.dp))
+                        CapsuleSegment({ showText = true }, Modifier.semantics { contentDescription = "Text options" }) {
+                            Text("Aa", fontSize = 19.sp, color = g.text, fontWeight = FontWeight.Medium)
+                        }
                         CapsuleDivider()
-                        CapsuleSegment({ changeFont(1f) }, enabled = s.fontSize < MAX_FONT) { Text("A", fontSize = 26.sp, color = g.text, fontWeight = FontWeight.Medium) }
+                        CapsuleSegment({ contentsTab = 0 }) { Icon(Icons.Rounded.FormatListBulleted, "Contents", tint = g.text, modifier = Modifier.size(22.dp)) }
+                        CapsuleDivider()
+                        CapsuleSegment({ showSettings = true }) { Icon(Icons.Rounded.MoreHoriz, "Reading options", tint = g.text, modifier = Modifier.size(22.dp)) }
                     }
                     Spacer(Modifier.weight(1f))
                     IconCircle(Icons.Rounded.ChevronRight, "Next chapter", { goTo(chapter + 1) }, size = 52.dp, enabled = chapter < chapters.lastIndex)
@@ -977,23 +1002,30 @@ private fun ReaderContent(
         }
     }
 
+    // A paragraph from what's on screen, so changes can be judged on the book itself.
+    fun previewText() =
+        // On a title page or other short chapter, borrow the first real paragraph further on.
+        (listState.firstVisibleItemIndex until ch.blocks.size).firstNotNullOfOrNull { i -> ch.blocks[i].takeIf { it.type == 0 && it.text.length > 60 }?.text }
+            ?: chapters.drop(chapter + 1).firstNotNullOfOrNull { c -> c.blocks.firstOrNull { it.type == 0 && it.text.length > 60 }?.text }
+            ?: ch.blocks.firstOrNull { it.type == 0 }?.text ?: book.title
+    if (showText) TextOptionsSheet(vm, s, dark, preview = remember { previewText() }, onDismiss = { showText = false })
     if (showSettings) ReaderOptionsSheet(
-        vm, s, dark,
-        // A paragraph from what's on screen, so changes can be judged on the book itself.
-        preview = remember {
-            // On a title page or other short chapter, borrow the first real paragraph further on.
-            (listState.firstVisibleItemIndex until ch.blocks.size).firstNotNullOfOrNull { i -> ch.blocks[i].takeIf { it.type == 0 && it.text.length > 60 }?.text }
-                ?: chapters.drop(chapter + 1).firstNotNullOfOrNull { c -> c.blocks.firstOrNull { it.type == 0 && it.text.length > 60 }?.text }
-                ?: ch.blocks.firstOrNull { it.type == 0 }?.text ?: book.title
-        },
-        progress = bookProgress, highlightCount = bookHighlights.size,
+        vm, s, dark, preview = remember { previewText() }, highlightCount = bookHighlights.size,
         onDismiss = { showSettings = false },
-        onContents = { showSettings = false; contentsTab = 0 },
         onHighlights = { showSettings = false; contentsTab = 1 },
-        onSearch = { showSettings = false; showSearch = true },
         onShare = { showSettings = false; shareText(ctx, "I'm reading “${book.title}” by ${book.author} on GBook") },
         onPosts = { showSettings = false; showGenerate = true },
     )
+    if (showToday) TodaySheet(
+        vm, book, sessionMs = (book.readingMs - sessionStartMs).coerceAtLeast(0),
+        onPlan = { showToday = false; showPlan = true },
+        onAllActivity = { showToday = false; showActivity = true },
+        onDismiss = { showToday = false },
+    )
+    if (showActivity) ReadingActivitySheet(
+        vm, onOpen = { b -> showActivity = false; if (b.id != book.id) onOpenBook(b) }, onDismiss = { showActivity = false },
+    )
+    if (showPlan) PlanSheet(vm, book, onDismiss = { showPlan = false })
     contentsTab?.let { tab ->
         ContentsSheet(
             vm, book, chapters, chapter, bookHighlights, tab,
@@ -1642,33 +1674,18 @@ private fun SearchSheet(chapters: List<Chapter>, onDismiss: () -> Unit, onResult
 }
 
 /**
- * Everything the reader offers, in one solid sheet: a live preview of the page, the book's contents,
- * highlights, search, posts and sharing, then the text and page settings.
+ * Everything about the text, from the reader's Aa button: a live preview of the page, then size, font, line spacing,
+ * margins, weight and alignment.
  */
 @Composable
-fun ReaderOptionsSheet(
-    vm: AppViewModel, s: ReaderSettings, dark: Boolean, preview: String, progress: Float, highlightCount: Int,
-    onDismiss: () -> Unit, onContents: () -> Unit, onHighlights: () -> Unit, onSearch: () -> Unit, onShare: () -> Unit, onPosts: () -> Unit,
-) {
+fun TextOptionsSheet(vm: AppViewModel, s: ReaderSettings, dark: Boolean, preview: String, onDismiss: () -> Unit) {
     val g = LocalG.current
-    val activity = LocalContext.current as? android.app.Activity
-    var brightness by remember {
-        mutableFloatStateOf(activity?.window?.attributes?.screenBrightness?.takeIf { it >= 0 } ?: 0.5f)
-    }
-    GSheet(onDismiss, "Reading options", full = true, heightFraction = 0.92f) {
+    GSheet(onDismiss, "Text", full = true, heightFraction = 0.92f) {
         PagePreview(s, dark, preview, Modifier.padding(horizontal = 20.dp))
         // A hairline under the fixed preview, so settings scrolling up don't butt against it.
         HorizontalDivider(Modifier.padding(top = 12.dp), color = g.separator)
         Column(Modifier.weight(1f).verticalScroll(rememberScrollState()).padding(horizontal = 20.dp)) {
-            Row(Modifier.padding(top = 12.dp), horizontalArrangement = Arrangement.spacedBy(8.dp)) {
-                OptionTile(Icons.Rounded.FormatListBulleted, "Contents", "${(progress * 100).toInt()}%", onContents, Modifier.weight(1f))
-                OptionTile(Icons.Rounded.FormatQuote, "Highlights", if (highlightCount > 0) "$highlightCount" else null, onHighlights, Modifier.weight(1f))
-                OptionTile(Icons.Rounded.Search, "Search", null, onSearch, Modifier.weight(1f))
-                OptionTile(Icons.Rounded.AutoAwesome, "Posts", null, onPosts, Modifier.weight(1f))
-                OptionTile(Icons.Rounded.IosShare, "Share", null, onShare, Modifier.weight(1f))
-            }
-            Text("TEXT & PAGE", style = GType.eyebrow, color = g.text2, modifier = Modifier.padding(top = 22.dp, bottom = 10.dp))
-            Row(verticalAlignment = Alignment.CenterVertically) {
+            Row(Modifier.padding(top = 16.dp), verticalAlignment = Alignment.CenterVertically) {
                 SegmentCapsule(Modifier.weight(1f), height = 52.dp, tint = g.fill) {
                     CapsuleSegment({ vm.updateSettings { it.copy(fontSize = (it.fontSize - 1).coerceAtLeast(MIN_FONT)) } }, Modifier.weight(1f)) { Text("A", fontSize = 17.sp, color = g.text) }
                     CapsuleDivider()
@@ -1678,12 +1695,49 @@ fun ReaderOptionsSheet(
                 }
             }
             FontPicker(s.font) { id -> vm.updateSettings { it.copy(font = id) } }
+            SettingSlider(Icons.Rounded.FormatLineSpacing, s.lineHeight, 1.2f..2.2f, label = "Line spacing", valueText = "%.1f×".format(s.lineHeight)) { v -> vm.updateSettings { it.copy(lineHeight = v) } }
+            MarginControl(s.margin) { m -> vm.updateSettings { it.copy(margin = m) } }
+            Column(Modifier.padding(vertical = 14.dp).clip(RoundedCornerShape(22.dp)).background(g.surface)) {
+                OptionRow("Bold Text", null, s.bold) { on -> vm.updateSettings { it.copy(bold = on) } }
+                HorizontalDivider(Modifier.padding(start = 20.dp), color = g.separator)
+                OptionRow("Justify Text", null, s.justify) { on -> vm.updateSettings { it.copy(justify = on) } }
+            }
+            Text(
+                "Tip: pinch the page with two fingers to change text size.",
+                fontSize = 14.sp, color = g.text2, modifier = Modifier.fillMaxWidth().padding(bottom = 16.dp), textAlign = TextAlign.Center,
+            )
+        }
+    }
+}
+
+/**
+ * The rest of the reader's options, from its ··· button: a live preview of the page, highlights, posts and sharing,
+ * then brightness, page turning, themes and the reading tracker. (Contents, search and text have their own buttons.)
+ */
+@Composable
+fun ReaderOptionsSheet(
+    vm: AppViewModel, s: ReaderSettings, dark: Boolean, preview: String, highlightCount: Int,
+    onDismiss: () -> Unit, onHighlights: () -> Unit, onShare: () -> Unit, onPosts: () -> Unit,
+) {
+    val g = LocalG.current
+    val activity = LocalContext.current as? android.app.Activity
+    var brightness by remember {
+        mutableFloatStateOf(activity?.window?.attributes?.screenBrightness?.takeIf { it >= 0 } ?: 0.5f)
+    }
+    GSheet(onDismiss, "Reading options", full = true, heightFraction = 0.92f) {
+        PagePreview(s, dark, preview, Modifier.padding(horizontal = 20.dp))
+        HorizontalDivider(Modifier.padding(top = 12.dp), color = g.separator)
+        Column(Modifier.weight(1f).verticalScroll(rememberScrollState()).padding(horizontal = 20.dp)) {
+            Row(Modifier.padding(top = 12.dp), horizontalArrangement = Arrangement.spacedBy(8.dp)) {
+                OptionTile(Icons.Rounded.FormatQuote, "Highlights", if (highlightCount > 0) "$highlightCount" else null, onHighlights, Modifier.weight(1f))
+                OptionTile(Icons.Rounded.AutoAwesome, "Posts", null, onPosts, Modifier.weight(1f))
+                OptionTile(Icons.Rounded.IosShare, "Share", null, onShare, Modifier.weight(1f))
+            }
+            Text("PAGE & THEME", style = GType.eyebrow, color = g.text2, modifier = Modifier.padding(top = 22.dp, bottom = 10.dp))
             SettingSlider(Icons.Rounded.LightMode, brightness, 0.02f..1f) { v ->
                 brightness = v
                 activity?.window?.let { w -> w.attributes = w.attributes.apply { screenBrightness = v } }
             }
-            SettingSlider(Icons.Rounded.FormatLineSpacing, s.lineHeight, 1.2f..2.2f, label = "Line spacing", valueText = "%.1f×".format(s.lineHeight)) { v -> vm.updateSettings { it.copy(lineHeight = v) } }
-            MarginControl(s.margin) { m -> vm.updateSettings { it.copy(margin = m) } }
             PageModeControl(s.pageMode) { m -> vm.updateSettings { it.copy(pageMode = m) } }
             LazyVerticalGrid(
                 GridCells.Fixed(3), Modifier.padding(top = 8.dp).height(232.dp),
@@ -1705,16 +1759,8 @@ fun ReaderOptionsSheet(
                 }
             }
             Column(Modifier.padding(vertical = 14.dp).clip(RoundedCornerShape(22.dp)).background(g.surface)) {
-                OptionRow("Bold Text", null, s.bold) { on -> vm.updateSettings { it.copy(bold = on) } }
-                HorizontalDivider(Modifier.padding(start = 20.dp), color = g.separator)
-                OptionRow("Justify Text", null, s.justify) { on -> vm.updateSettings { it.copy(justify = on) } }
-                HorizontalDivider(Modifier.padding(start = 20.dp), color = g.separator)
                 TrackerOptions(s, vm)
             }
-            Text(
-                "Tip: pinch the page with two fingers to change text size.",
-                fontSize = 14.sp, color = g.text2, modifier = Modifier.fillMaxWidth().padding(bottom = 16.dp), textAlign = TextAlign.Center,
-            )
         }
     }
 }

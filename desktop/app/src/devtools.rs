@@ -46,6 +46,11 @@ fn step(shell: ShellRc, steps: Rc<Vec<String>>, i: usize) {
         }),
         "settings" => shell.open_settings(arg),
         "open" => {
+            // open:<title words>[@chapter]
+            let (arg, at) = match arg.split_once('@') {
+                Some((a, c)) => (a, c.parse().ok().map(|c: i32| (c, 0))),
+                None => (arg, None),
+            };
             let id = if arg == "first" || arg.is_empty() {
                 shell
                     .app
@@ -63,7 +68,7 @@ fn step(shell: ShellRc, steps: Rc<Vec<String>>, i: usize) {
                     .map(|b| b.id.clone())
             };
             if let Some(id) = id {
-                shell.open_book(&id, None);
+                shell.open_book(&id, at);
             }
         }
         "back" => shell.close_reader(),

@@ -454,6 +454,8 @@ pub fn top_bar(
         outer.add_css_class("clear");
     }
     let row = gtk::CenterBox::new();
+    // A long title gives way before the buttons do (it scrolls to show the rest).
+    row.set_shrink_center_last(false);
     row.set_start_widget(Some(start));
     row.set_center_widget(center);
     row.set_end_widget(Some(end));
@@ -480,4 +482,149 @@ pub fn top_bar(
 pub fn open_uri(app: &AppRc, uri: &str) {
     let l = gtk::UriLauncher::new(uri);
     l.launch(app.window().as_ref(), gtk::gio::Cancellable::NONE, |_| {});
+}
+
+// ---------------------------------------------------------------------------------------------------------
+// Marquee: one line of text shown in full; when it's wider than its space it scrolls to reveal the rest.
+
+/// When a marquee scrolls.
+#[derive(Clone, Copy, PartialEq, Eq)]
+pub enum Reveal {
+    /// Twice whenever it appears or its text changes, and again on hover.
+    Auto,
+    /// Only while the pointer is over it.
+    Hover,
+}
+
+#[derive(Clone)]
+pub struct Marquee {
+    pub widget: gtk::ScrolledWindow,
+    label: gtk::Label,
+    run: std::rc::Rc<MarqueeRun>,
+}
+
+#[derive(Default)]
+struct MarqueeRun {
+    /// When the current pass started, while animating.
+    started: Cell<Option<std::time::Instant>>,
+    /// Passes left; each goes to the end and back.
+    passes: Cell<u32>,
+    tick: RefCell<Option<gtk::TickCallbackId>>,
+}
+
+/// Scroll speed (px/s) and the pause at each end of a pass.
+const MARQUEE_SPEED: f64 = 45.0;
+const MARQUEE_PAUSE: f64 = 1.2;
+
+impl Marquee {
+    /// A marquee at most `max_width` pixels wide (-1 for as wide as its place).
+    pub fn new(text: &str, classes: &[&str], reveal: Reveal, max_width: i32) -> Marquee {
+        let l = label(text, classes);
+        l.set_single_line_mode(true);
+        let sw = gtk::ScrolledWindow::new();
+        sw.set_policy(gtk::PolicyType::External, gtk::PolicyType::Never);
+        sw.set_propagate_natural_width(true);
+        sw.set_propagate_natural_height(true);
+        sw.set_max_content_width(max_width);
+        sw.set_child(Some(&l));
+        sw.set_can_target(true);
+        let m = Marquee {
+            widget: sw.clone(),
+            label: l,
+            run: Default::default(),
+        };
+        let enter = gtk::EventControllerMotion::new();
+        let mm = m.clone();
+        enter.connect_enter(move |_, _, _| mm.start(u32::MAX));
+        let mm = m.clone();
+        enter.connect_leave(move |_| {
+            if reveal == Reveal::Hover {
+                mm.stop();
+            } else {
+                // Finish the current pass, then rest.
+                mm.run.passes.set(mm.run.passes.get().min(1));
+            }
+        });
+        sw.add_controller(enter);
+        if reveal == Reveal::Auto {
+            let mm = m.clone();
+            sw.connect_map(move |_| mm.start_soon());
+        }
+        m
+    }
+
+    pub fn set_text(&self, text: &str) {
+        if self.label.text() != text {
+            self.label.set_text(text);
+            self.stop();
+            if self.widget.is_mapped() {
+                self.start_soon();
+            }
+        }
+    }
+
+    /// Two passes once the layout has settled.
+    fn start_soon(&self) {
+        let m = self.clone();
+        glib::timeout_add_local_once(std::time::Duration::from_millis(500), move || m.start(2));
+    }
+
+    fn start(&self, passes: u32) {
+        let adj = self.widget.hadjustment();
+        if adj.upper() - adj.page_size() <= 1.0 {
+            return;
+        }
+        self.run.passes.set(passes);
+        if self.run.tick.borrow().is_some() {
+            return;
+        }
+        self.run.started.set(Some(std::time::Instant::now()));
+        let run = self.run.clone();
+        let id = self.widget.add_tick_callback(move |sw, _| {
+            let adj = sw.hadjustment();
+            let over = adj.upper() - adj.page_size();
+            let Some(start) = run.started.get() else {
+                return glib::ControlFlow::Break;
+            };
+            if over <= 1.0 {
+                adj.set_value(0.0);
+                run.tick.borrow_mut().take();
+                return glib::ControlFlow::Break;
+            }
+            let travel = over / MARQUEE_SPEED;
+            let t = start.elapsed().as_secs_f64();
+            // Pause, scroll to the end, pause, scroll back twice as fast.
+            let x = if t < MARQUEE_PAUSE {
+                0.0
+            } else if t < MARQUEE_PAUSE + travel {
+                (t - MARQUEE_PAUSE) * MARQUEE_SPEED
+            } else if t < 2.0 * MARQUEE_PAUSE + travel {
+                over
+            } else if t < 2.0 * MARQUEE_PAUSE + 1.5 * travel {
+                over - (t - 2.0 * MARQUEE_PAUSE - travel) * MARQUEE_SPEED * 2.0
+            } else {
+                let left = run.passes.get().saturating_sub(1);
+                run.passes.set(left);
+                if left == 0 {
+                    adj.set_value(0.0);
+                    run.started.set(None);
+                    run.tick.borrow_mut().take();
+                    return glib::ControlFlow::Break;
+                }
+                run.started.set(Some(std::time::Instant::now()));
+                0.0
+            };
+            adj.set_value(x.clamp(0.0, over));
+            glib::ControlFlow::Continue
+        });
+        *self.run.tick.borrow_mut() = Some(id);
+    }
+
+    fn stop(&self) {
+        if let Some(id) = self.run.tick.borrow_mut().take() {
+            id.remove();
+        }
+        self.run.started.set(None);
+        self.widget.hadjustment().set_value(0.0);
+    }
 }

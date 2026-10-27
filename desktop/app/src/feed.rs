@@ -370,16 +370,17 @@ fn post_card(app: &AppRc, post: &Post, book: &Book) -> gtk::Widget {
     let t = label(&book.title, &["semibold"]);
     t.set_ellipsize(pango::EllipsizeMode::End);
     hv.append(&t);
-    let sub = label(
+    let sub = Marquee::new(
         if post.chapter_title.trim().is_empty() {
             &book.author
         } else {
             &post.chapter_title
         },
         &["caption", "text2"],
+        Reveal::Hover,
+        -1,
     );
-    sub.set_ellipsize(pango::EllipsizeMode::End);
-    hv.append(&sub);
+    hv.append(&sub.widget);
     h.append(&hv);
     h.append(&label(
         match post.kind {

@@ -38,7 +38,7 @@ pub struct Reader {
     starts: RefCell<Vec<i32>>,
     /// Paragraph characters before each chapter, and in total at the end, for progress and page estimates.
     chars_before: Vec<i64>,
-    title: gtk::Button,
+    title_text: Marquee,
     page_label: gtk::Label,
     left_label: gtk::Label,
     progress_fill: gtk::Box,
@@ -153,10 +153,9 @@ pub fn open(
     title.add_css_class("flat");
     title.add_css_class("faint");
     title.add_css_class("reader-chrome");
-    let tl = gtk::Label::new(None);
-    tl.set_ellipsize(pango::EllipsizeMode::End);
-    tl.set_max_width_chars(50);
-    title.set_child(Some(&tl));
+    // Long chapter names scroll to show themselves in full.
+    let title_text = Marquee::new("", &[], Reveal::Auto, 520);
+    title.set_child(Some(&title_text.widget));
     title.set_tooltip_text(Some("Contents"));
     let start = hbox(8);
     start.append(&back);
@@ -220,7 +219,7 @@ pub fn open(
         scroller: scroller.clone(),
         starts: RefCell::new(Vec::new()),
         chars_before,
-        title: title.clone(),
+        title_text,
         page_label,
         left_label,
         progress_fill,
@@ -576,11 +575,7 @@ impl Reader {
         buffer.apply_tag_by_name("img", &buffer.iter_at_offset(anchor_at), &buffer.end_iter());
         self.view.set_buffer(Some(&buffer));
         self.view.add_child_at_anchor(&self.chapter_end(), &anchor);
-        self.title
-            .child()
-            .and_downcast::<gtk::Label>()
-            .unwrap()
-            .set_text(&ch.title);
+        self.title_text.set_text(&ch.title);
         self.apply_highlights();
 
         let (b, off) = self.pending.take().unwrap_or((0, 0));
@@ -1095,9 +1090,10 @@ impl Reader {
                 gdk::Key::period | gdk::Key::comma if r.app.data().settings.tracker => {
                     let fwd = key == gdk::Key::period;
                     if r.step_track(fwd)
-                        && let Some(w) = r.wheel.borrow().as_ref() {
-                            w.nudge(fwd);
-                        }
+                        && let Some(w) = r.wheel.borrow().as_ref()
+                    {
+                        w.nudge(fwd);
+                    }
                 }
                 gdk::Key::F11 => {
                     if let Some(win) = r.app.window() {
@@ -1819,10 +1815,14 @@ pub fn contents_sheet(r: &Rc<Reader>, tab: usize) {
                         b.add_css_class("on");
                     }
                     let h = hbox(12);
-                    let l = label(&c.title, if on { &["accent", "semibold"] } else { &[] });
-                    l.set_hexpand(true);
-                    l.set_ellipsize(pango::EllipsizeMode::End);
-                    h.append(&l);
+                    let l = Marquee::new(
+                        &c.title,
+                        if on { &["accent", "semibold"] } else { &[] },
+                        Reveal::Hover,
+                        -1,
+                    );
+                    l.widget.set_hexpand(true);
+                    h.append(&l.widget);
                     h.append(&label(&(i + 1).to_string(), &["text2", "caption"]));
                     b.set_child(Some(&h));
                     let (r2, c2) = (r.clone(), close.clone());
@@ -1869,7 +1869,7 @@ pub fn contents_sheet(r: &Rc<Reader>, tab: usize) {
                         .get(h.chapter as usize)
                         .map(|c| c.title.as_str())
                         .unwrap_or("");
-                    v.append(&label(ct, &["eyebrow"]));
+                    v.append(&Marquee::new(ct, &["eyebrow"], Reveal::Hover, -1).widget);
                     v.append(&wrap_label(&h.text, &["quote"], 3));
                     if let Some(n) = h.note.as_ref().filter(|n| !n.is_empty()) {
                         v.append(&wrap_label(n, &["caption", "text2"], 2));
@@ -1957,7 +1957,7 @@ pub fn search_sheet(r: &Rc<Reader>) {
                 let btn = gtk::Button::new();
                 btn.add_css_class("menu-row");
                 let v = vbox(2);
-                v.append(&label(&c.title, &["eyebrow"]));
+                v.append(&Marquee::new(&c.title, &["eyebrow"], Reveal::Hover, -1).widget);
                 let l = wrap_label(
                     &format!("{}{snippet}…", if start_chars > 0 { "…" } else { "" }),
                     &[],

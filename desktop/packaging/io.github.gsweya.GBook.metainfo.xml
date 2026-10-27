@@ -1,0 +1,30 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<component type="desktop-application">
+  <id>io.github.gsweya.GBook</id>
+  <name>GBook</name>
+  <summary>Read, highlight and remember your books</summary>
+  <metadata_license>CC0-1.0</metadata_license>
+  <project_license>MIT</project_license>
+  <description>
+    <p>
+      GBook is a lightweight reader for EPUB and PDF books. Highlight passages, add notes and reactions,
+      and turn your highlights and each chapter's key ideas into a feed of posts you can scroll to remember
+      what you read. It tracks your reading time, streak and daily goal, and its library is interchangeable
+      with GBook on Android.
+    </p>
+  </description>
+  <launchable type="desktop-id">io.github.gsweya.GBook.desktop</launchable>
+  <url type="homepage">https://github.com/Gsweya/eBook</url>
+  <provides>
+    <binary>gbook</binary>
+    <mediatype>application/epub+zip</mediatype>
+    <mediatype>application/pdf</mediatype>
+  </provides>
+  <developer id="io.github.gsweya">
+    <name>Gsweya</name>
+  </developer>
+  <releases>
+    <release version="0.1.0" date="2026-10-27"/>
+  </releases>
+  <content_rating type="oars-1.1"/>
+</component>

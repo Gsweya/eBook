@@ -1,0 +1,12 @@
+[package]
+name = "gbook"
+description = "GBook: a lightweight eReader for EPUB and PDF with highlights, a feed of ideas and reading stats"
+version.workspace = true
+edition.workspace = true
+license.workspace = true
+repository.workspace = true
+
+[dependencies]
+gbook-core = { path = "../core" }
+gtk = { package = "gtk4", version = "0.11", features = ["v4_14"] }
+poppler-rs = "0.26"

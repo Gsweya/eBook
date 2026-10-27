@@ -75,6 +75,27 @@ Release signing uses a `gbook/keystore.properties` file (not committed) with `st
 
 Debug builds also bundle any `.epub`/`.pdf` files you put in `sample_books/` (git-ignored); they are imported on first launch.
 
+## Desktop app (Linux and Windows)
+
+`desktop/` is a native GTK 4 app in Rust with the same look and features as the phone: Library with reading stats, plans and collections, the EPUB reader with highlights, notes, reactions and the focus tracker, the Feed, Search, Settings and PDF page view. Wide windows get a sidebar like Apple Books on the Mac; narrow ones switch to the phone's layout and pill bar. The window has rounded corners and its own window buttons. It reads and writes the same `library.json` and backup `.zip` as Android, so a phone backup restores on the desktop and the other way round. Data lives in `~/.local/share/gbook`.
+
+It's built to stay light: a 1.6 MB binary that uses the GTK, Pango and Poppler already on a GNOME desktop, about 250 ms to the first frame with 100 books, and 110–150 MB of memory while reading.
+
+Requires Rust, GTK 4.14+ and Poppler development files (`sudo dnf install gtk4-devel poppler-glib-devel` or `sudo apt install libgtk-4-dev libpoppler-glib-dev`).
+
+```sh
+cd desktop
+cargo run --release                       # run from the source tree
+./packaging/build-packages.sh             # dist/gbook_<version>_amd64.deb and dist/gbook-<version>-1.x86_64.rpm
+sudo ./packaging/install.sh /usr/local    # or install without a package
+```
+
+Keyboard: arrows, Space and Page Up/Down turn pages; `[` and `]` change chapter; Ctrl + / Ctrl − change the text size; Ctrl+F searches; Ctrl+T opens the contents; `.` and `,` move the focus tracker; F11 is full screen; Esc goes back.
+
+Windows builds use MSYS2 and an Inno Setup installer; see [docs/windows.md](docs/windows.md). The *Desktop packages* GitHub workflow builds the Windows installer and the Linux packages, and attaches them to `desktop-v*` releases. Books can be added with the + button, Ctrl+O, by dropping files on the window, or by opening them from the file manager.
+
+For UI work, `GBOOK_DEV` runs a script of steps and saves snapshots of the window, e.g. `GBOOK_DEV="open:first; wait:800; shot:/tmp/reader.png; quit" cargo run`; see `desktop/app/src/devtools.rs`. `GBOOK_DATA_DIR` points the app at another library folder.
+
 ## Change how it looks
 
 Everything visual lives in a few files under `gbook/app/src/main/java/com/gbook/ui/`:
@@ -93,9 +114,10 @@ Add a palette to `AccentPalettes` and it appears in **Settings → Appearance** 
 ## Project layout
 
 - `gbook/` — the Android app (`com.gbook`)
+- `desktop/` — the Linux app: `core/` (library format, EPUB parser, feed posts, backups; no UI) and `app/` (GTK 4)
 - `docs/spec.md`, `docs/spec-notes/` — design notes
 - `bookgram-monorepo-structure.md` — original idea document
 
 ## Licences
 
-GBook is released under the [MIT License](LICENSE). Bundled fonts are under the SIL Open Font License 1.1; the 3D icons are [Noto 3D Emoji](https://github.com/googlefonts/noto-emoji) under the Apache License 2.0.
+GBook is released under the [MIT License](LICENSE). Bundled fonts are under the SIL Open Font License 1.1; the 3D icons are [Noto 3D Emoji](https://github.com/googlefonts/noto-emoji) under the Apache License 2.0. The desktop app's icons are [Material Icons](https://github.com/google/material-design-icons) (Apache License 2.0), and it renders PDFs with the system's [Poppler](https://poppler.freedesktop.org/) library (GPL).

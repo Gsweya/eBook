@@ -1,0 +1,17 @@
+<svg xmlns="http://www.w3.org/2000/svg" width="128" height="128" viewBox="0 0 128 128">
+  <defs>
+    <linearGradient id="bg" x1="0" y1="1" x2="1" y2="0">
+      <stop offset="0" stop-color="#F28C28"/>
+      <stop offset="1" stop-color="#E8693A"/>
+    </linearGradient>
+    <linearGradient id="sheen" x1="0" y1="0" x2="0" y2="1">
+      <stop offset="0" stop-color="#FFFFFF" stop-opacity="0.22"/>
+      <stop offset="0.5" stop-color="#FFFFFF" stop-opacity="0"/>
+    </linearGradient>
+  </defs>
+  <rect x="8" y="10" width="112" height="112" rx="26" fill="#000000" fill-opacity="0.12"/>
+  <rect x="8" y="8" width="112" height="112" rx="26" fill="url(#bg)"/>
+  <rect x="8" y="8" width="112" height="112" rx="26" fill="url(#sheen)"/>
+  <!-- The open-book glyph from the Android launcher icon. -->
+  <path transform="translate(22 22) scale(3.5)" fill="#FFFFFF" d="M12,6.5C10.4,5.3 8.2,4.8 6,4.8C4.9,4.8 3.8,5 3,5.3V19C3.8,18.7 4.9,18.5 6,18.5C8.2,18.5 10.4,19 12,20.2C13.6,19 15.8,18.5 18,18.5C19.1,18.5 20.2,18.7 21,19V5.3C20.2,5 19.1,4.8 18,4.8C15.8,4.8 13.6,5.3 12,6.5ZM11,17.6C9.5,16.9 7.8,16.6 6,16.6C5.7,16.6 5.3,16.6 5,16.7V6.8C5.3,6.8 5.7,6.7 6,6.7C7.8,6.7 9.6,7.2 11,8V17.6Z"/>
+</svg>

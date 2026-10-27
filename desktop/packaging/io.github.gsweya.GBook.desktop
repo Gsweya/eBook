@@ -1,0 +1,12 @@
+[Desktop Entry]
+Type=Application
+Name=GBook
+GenericName=eBook Reader
+Comment=Read EPUB and PDF books, highlight them and turn ideas into posts
+Exec=gbook %F
+Icon=io.github.gsweya.GBook
+Terminal=false
+Categories=Office;Viewer;Literature;
+MimeType=application/epub+zip;application/pdf;
+Keywords=ebook;epub;pdf;reader;book;highlights;library;
+StartupNotify=true

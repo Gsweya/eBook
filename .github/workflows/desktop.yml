@@ -1,0 +1,77 @@
+# Builds the desktop app's packages: .deb and .rpm on Linux, an installer and a portable .zip on Windows.
+# Runs when a desktop-v* tag is pushed (and attaches the packages to that tag's release), or by hand from the
+# Actions tab.
+name: Desktop packages
+
+on:
+  push:
+    tags: ["desktop-v*"]
+  workflow_dispatch:
+
+permissions:
+  contents: write
+
+jobs:
+  linux:
+    runs-on: ubuntu-24.04
+    steps:
+      - uses: actions/checkout@v4
+      - name: Install GTK, Poppler and rpmbuild
+        run: sudo apt-get update && sudo apt-get install -y libgtk-4-dev libpoppler-glib-dev rpm
+      - name: Build .deb and .rpm
+        run: desktop/packaging/build-packages.sh
+      - uses: actions/upload-artifact@v4
+        with:
+          name: linux
+          path: |
+            dist/gbook_*.deb
+            dist/gbook-*.rpm
+
+  windows:
+    runs-on: windows-latest
+    defaults:
+      run:
+        shell: msys2 {0}
+    steps:
+      - uses: actions/checkout@v4
+      - uses: msys2/setup-msys2@v2
+        with:
+          msystem: UCRT64
+          update: true
+          install: >-
+            git zip
+            mingw-w64-ucrt-x86_64-rust
+            mingw-w64-ucrt-x86_64-gcc
+            mingw-w64-ucrt-x86_64-pkgconf
+            mingw-w64-ucrt-x86_64-gtk4
+            mingw-w64-ucrt-x86_64-poppler
+            mingw-w64-ucrt-x86_64-librsvg
+            mingw-w64-ucrt-x86_64-adwaita-icon-theme
+      - name: Build and bundle with GTK
+        run: desktop/packaging/windows/build.sh
+      - name: Make the installer
+        shell: pwsh
+        run: |
+          choco install innosetup -y --no-progress
+          $version = (Select-String -Path desktop/Cargo.toml -Pattern '^version = "(.*)"').Matches[0].Groups[1].Value
+          & "${env:ProgramFiles(x86)}\Inno Setup 6\ISCC.exe" /Q "/DAppVersion=$version" "/DSourceDir=$PWD\dist\windows\GBook" "/O$PWD\dist" desktop\packaging\windows\gbook.iss
+      - uses: actions/upload-artifact@v4
+        with:
+          name: windows
+          path: |
+            dist/GBook-*-setup.exe
+            dist/GBook-*-windows-portable.zip
+
+  release:
+    if: startsWith(github.ref, 'refs/tags/desktop-v')
+    needs: [linux, windows]
+    runs-on: ubuntu-24.04
+    steps:
+      - uses: actions/download-artifact@v4
+        with:
+          path: dist
+          merge-multiple: true
+      - uses: softprops/action-gh-release@v2
+        with:
+          name: GBook for desktop ${{ github.ref_name }}
+          files: dist/*

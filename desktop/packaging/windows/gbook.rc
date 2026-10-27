@@ -1,0 +1,2 @@
+// Windows resources: the app icon for the .exe (Explorer, taskbar, Alt+Tab).
+1 ICON "gbook.ico"

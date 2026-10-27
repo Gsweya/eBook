@@ -162,6 +162,9 @@ import androidx.compose.ui.text.AnnotatedString
 import androidx.compose.ui.text.SpanStyle
 import androidx.compose.ui.text.TextLayoutResult
 import androidx.compose.ui.text.TextStyle
+import androidx.compose.ui.text.TextMeasurer
+import androidx.compose.foundation.basicMarquee
+import androidx.compose.runtime.key
 import androidx.compose.ui.text.buildAnnotatedString
 import androidx.compose.ui.text.font.FontFamily
 import androidx.compose.ui.text.font.FontWeight
@@ -173,6 +176,8 @@ import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.text.withStyle
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
+import androidx.compose.ui.unit.Density
+import androidx.compose.ui.unit.TextUnit
 import com.gbook.AppViewModel
 import com.gbook.data.Book
 import com.gbook.data.BookContent
@@ -229,6 +234,19 @@ private data class Track(val block: Int, val unit: Int)
 private class ParaRef {
     var layout: TextLayoutResult? = null
     var coords: LayoutCoordinates? = null
+    var glyphs: Glyphs? = null
+}
+
+/** Font measurements for marks drawn over text: the band glyphs fill around a baseline, and single-character widths. */
+private class Glyphs(private val measurer: TextMeasurer, style: TextStyle) {
+    // Unspaced and unindented, so measurements don't depend on the reader's line spacing or first-line indent.
+    private val plain = style.copy(lineHeight = TextUnit.Unspecified, textIndent = TextIndent.None)
+    private val line = measurer.measure("x", plain)
+    val ascent = line.firstBaseline
+    val descent = line.size.height - line.firstBaseline
+    private val widths = HashMap<Char, Float>()
+    fun advance(c: Char) = widths.getOrPut(c) { measurer.measure(c.toString(), plain).getHorizontalPosition(1, true) }
+    val hyphen get() = advance('-')
 }
 
 private val HandleBlue = Color(0xFF3A7BF2)
@@ -605,6 +623,7 @@ private fun ReaderContent(
         var bestDist = Float.MAX_VALUE
         for ((i, ref) in paras) {
             val l = ref.layout ?: continue
+            val g = ref.glyphs ?: continue
             val c = ref.coords?.takeIf { it.isAttached } ?: continue
             val local = c.localPositionOf(r, p)
             val h = c.size.height.toFloat()
@@ -614,25 +633,26 @@ private fun ReaderContent(
             val y = local.y.coerceIn(0f, h - 1f)
             val line = l.getLineForVerticalPosition(y)
             val x = local.x.coerceIn(l.getLineLeft(line), l.getLineRight(line))
-            best = TextPos(i, l.getOffsetForPosition(Offset(x, y))) to
+            best = TextPos(i, l.drawnOffset(Offset(x, y), g)) to
                 r.localPositionOf(c, Offset(x, (l.getLineTop(line) + l.getLineBottom(line)) / 2))
         }
         return best
     }
 
-    /** Caret line for a selection end in reader coordinates: x at the caret, spanning the line. */
+    /** Caret line for a selection end in reader coordinates: x at the caret, spanning the glyph band like the selection fill. */
     fun caretRect(pos: TextPos, isStart: Boolean): Rect? {
         val ref = paras[pos.block] ?: return null
         val l = ref.layout ?: return null
+        val g = ref.glyphs ?: return null
         val c = ref.coords?.takeIf { it.isAttached } ?: return null
         val r = root() ?: return null
         val len = l.layoutInput.text.length
         if (len == 0) return null
         val ci = (if (isStart) pos.off else pos.off - 1).coerceIn(0, len - 1)
-        val box = l.getBoundingBox(ci)
         val line = l.getLineForOffset(ci)
-        val tl = r.localPositionOf(c, Offset(if (isStart) box.left else box.right, l.getLineTop(line)))
-        return Rect(tl.x, tl.y, tl.x, tl.y + l.getLineBottom(line) - l.getLineTop(line))
+        val x = if (isStart) l.drawnLeft(ci, line, g) else l.drawnRight(ci, line, g)
+        val tl = r.localPositionOf(c, Offset(x, l.getLineBaseline(line) - g.ascent))
+        return Rect(tl.x, tl.y, tl.x, tl.y + g.ascent + g.descent)
     }
 
     fun textOf(b: Int) = ch.blocks[b].text
@@ -830,11 +850,14 @@ private fun ReaderContent(
         val pg = pageInChapter
         AnimatedVisibility(!chrome, enter = fadeIn(), exit = fadeOut()) {
             Box(Modifier.fillMaxSize()) {
-                Text(
-                    ch.title, color = ink.copy(alpha = 0.45f), fontSize = 15.sp, fontWeight = FontWeight.SemiBold, maxLines = 1,
-                    overflow = TextOverflow.Ellipsis,
-                    modifier = Modifier.align(Alignment.TopCenter).statusBarsPadding().padding(top = 14.dp, start = 64.dp, end = 64.dp),
-                )
+                // A chapter name too long for the line scrolls through twice when it appears instead of being cut off.
+                key(ch.title) {
+                    Text(
+                        ch.title, color = ink.copy(alpha = 0.45f), fontSize = 15.sp, fontWeight = FontWeight.SemiBold, maxLines = 1,
+                        modifier = Modifier.align(Alignment.TopCenter).statusBarsPadding().padding(top = 14.dp, start = 64.dp, end = 64.dp)
+                            .basicMarquee(iterations = 2, initialDelayMillis = 1500),
+                    )
+                }
                 // Page number, pages left and a thin progress line through the whole book.
                 Column(Modifier.align(Alignment.BottomCenter).fillMaxWidth().navigationBarsPadding().padding(horizontal = 24.dp).padding(bottom = 12.dp)) {
                     val faint = ink.copy(alpha = 0.45f)
@@ -860,7 +883,7 @@ private fun ReaderContent(
                 IconCircle(Icons.Rounded.ArrowBackIosNew, "Back", onBack, size = 44.dp)
                 Spacer(Modifier.width(8.dp))
                 Box(Modifier.weight(1f), contentAlignment = Alignment.Center) {
-                    PillButton(ch.title, { contentsTab = 0 }, Modifier.widthIn(max = 240.dp), height = 44.dp)
+                    PillButton(ch.title, { contentsTab = 0 }, Modifier.widthIn(max = 240.dp), height = 44.dp, scrollOverflow = true)
                 }
                 Spacer(Modifier.width(8.dp))
                 modeToggle?.let { it(); Spacer(Modifier.width(8.dp)) }
@@ -1050,7 +1073,10 @@ private fun Loupe(layer: GraphicsLayer, src: Offset, page: Color) {
     }
 }
 
-/** iOS selection handle: a caret bar with a round knob above the start or below the end; drag to adjust. */
+/**
+ * iOS selection handle: a caret bar with a round knob above the start or below the end; drag to adjust.
+ * Knob and bar scale with the caret, which spans the text's glyphs, so the handle grows and shrinks with the font size.
+ */
 @Composable
 private fun SelectionHandle(
     isStart: Boolean,
@@ -1061,16 +1087,19 @@ private fun SelectionHandle(
     onEnd: () -> Unit,
 ) {
     val coords = remember { arrayOfNulls<LayoutCoordinates>(1) }
-    val touchW = 48.dp; val pad = 22.dp; val knob = 12.dp
+    val touchW = 48.dp
+    // Room above and below the caret for the knob and a comfortable grab area.
+    fun Density.pad(caretH: Float) = maxOf(22.dp.toPx(), caretH * 0.75f)
     Box(
         Modifier
             .offset {
-                caret()?.let { IntOffset((it.left - touchW.toPx() / 2).roundToInt(), (it.top - pad.toPx()).roundToInt()) }
+                caret()?.let { IntOffset((it.left - touchW.toPx() / 2).roundToInt(), (it.top - pad(it.height)).roundToInt()) }
                     ?: IntOffset(-10_000, -10_000)
             }
             .layout { m, _ ->
                 val w = touchW.roundToPx()
-                val ht = ((caret()?.height ?: 0f) + 2 * pad.toPx()).roundToInt().coerceAtLeast(1)
+                val h = caret()?.height ?: 0f
+                val ht = (h + 2 * pad(h)).roundToInt().coerceAtLeast(1)
                 val pl = m.measure(Constraints.fixed(w, ht))
                 layout(w, ht) { pl.place(0, 0) }
             }
@@ -1098,9 +1127,10 @@ private fun SelectionHandle(
             .drawBehind {
                 val r = caret() ?: return@drawBehind
                 val x = size.width / 2
-                val t = pad.toPx(); val b = t + r.height
-                drawLine(HandleBlue, Offset(x, t), Offset(x, b), 2.dp.toPx(), cap = StrokeCap.Round)
-                drawCircle(HandleBlue, knob.toPx() / 2, Offset(x, if (isStart) t - knob.toPx() / 2 + 1f else b + knob.toPx() / 2 - 1f))
+                val t = pad(r.height); val b = t + r.height
+                val knob = maxOf(10.dp.toPx(), r.height * 0.42f)
+                drawLine(HandleBlue, Offset(x, t), Offset(x, b), maxOf(2.dp.toPx(), r.height * 0.07f), cap = StrokeCap.Round)
+                drawCircle(HandleBlue, knob / 2, Offset(x, if (isStart) t - knob / 2 + 1f else b + knob / 2 - 1f))
             },
     )
 }
@@ -1153,32 +1183,36 @@ private fun Paragraph(
     val drag by rememberUpdatedState(onDrag)
     val end by rememberUpdatedState(onEnd)
     val measurer = rememberTextMeasurer()
-    val annotated = remember(text, highlights, selection, searchTerm, tracked) {
-        buildAnnotatedString {
-            append(text)
-            highlights.forEach { (r, color, hlStyle) ->
-                if (hlStyle == 0 && !r.isEmpty()) addStyle(SpanStyle(background = HighlightColors[color % HighlightColors.size].copy(alpha = 0.38f)), r.first, r.last + 1)
+    val glyphs = remember(style) { Glyphs(measurer, style) }
+    ref.glyphs = glyphs
+    val searchHits = remember(text, searchTerm) {
+        buildList {
+            if (searchTerm.isNullOrBlank()) return@buildList
+            var idx = text.indexOf(searchTerm, ignoreCase = true)
+            while (idx >= 0) {
+                add(idx until idx + searchTerm.length)
+                idx = text.indexOf(searchTerm, idx + searchTerm.length, ignoreCase = true)
             }
-            if (!searchTerm.isNullOrBlank()) {
-                var idx = text.indexOf(searchTerm, ignoreCase = true)
-                while (idx >= 0) {
-                    addStyle(SpanStyle(background = SelectionColor.copy(alpha = 0.55f)), idx, idx + searchTerm.length)
-                    idx = text.indexOf(searchTerm, idx + searchTerm.length, ignoreCase = true)
-                }
-            }
-            tracked?.let { addStyle(SpanStyle(background = trackColor.copy(alpha = 0.2f)), it.first, it.last + 1) }
-            selection?.let { addStyle(SpanStyle(background = SelectionColor.copy(alpha = 0.7f)), it.first, it.last + 1) }
         }
     }
     Text(
-        annotated, style = style, onTextLayout = { ref.layout = it },
+        text, style = style, onTextLayout = { ref.layout = it },
         modifier = modifier.onGloballyPositioned { ref.coords = it }
+            // Marks are drawn here rather than as span backgrounds so they share the glyph band and the justified
+            // positions the selection handles use (span backgrounds fill the whole line-spacing slot).
             .drawBehind {
                 val l = ref.layout ?: return@drawBehind
                 highlights.forEach { (r, color, hlStyle) ->
-                    if (hlStyle == 1 && !r.isEmpty()) underline(l, r, HighlightColors[color % HighlightColors.size], 2.4.dp.toPx(), 3.5.dp.toPx())
+                    val c = HighlightColors[color % HighlightColors.size]
+                    if (hlStyle == 0) fill(l, glyphs, r, c.copy(alpha = 0.38f))
+                    else underline(l, glyphs, r, c, 2.4.dp.toPx(), 3.5.dp.toPx())
                 }
-                tracked?.let { if (!it.isEmpty()) underline(l, it, trackColor, 2.dp.toPx(), 3.dp.toPx()) }
+                searchHits.forEach { fill(l, glyphs, it, SelectionColor.copy(alpha = 0.55f)) }
+                tracked?.let {
+                    fill(l, glyphs, it, trackColor.copy(alpha = 0.2f))
+                    underline(l, glyphs, it, trackColor, 2.dp.toPx(), 3.dp.toPx())
+                }
+                selection?.let { fill(l, glyphs, it, SelectionColor.copy(alpha = 0.7f)) }
             }
             .drawWithContent {
                 drawContent()
@@ -1189,8 +1223,9 @@ private fun Paragraph(
                     if (len == 0) return@forEach
                     val ci = end.coerceIn(0, len - 1)
                     val m = measurer.measure(emoji, TextStyle(fontSize = (style.fontSize.value * 0.8f).sp))
-                    val x = (l.getBoundingBox(ci).right - m.size.width * 0.15f).coerceAtMost(size.width - m.size.width)
-                    val y = l.getLineTop(l.getLineForOffset(ci)) - m.size.height * 0.35f
+                    val line = l.getLineForOffset(ci)
+                    val x = (l.drawnRight(ci, line, glyphs) - m.size.width * 0.15f).coerceAtMost(size.width - m.size.width)
+                    val y = l.getLineTop(line) - m.size.height * 0.35f
                     drawText(m, topLeft = Offset(x, y))
                 }
             }
@@ -1203,8 +1238,8 @@ private fun Paragraph(
                     val u = up
                     if (u != null) {
                         u.consume()
-                        val l = ref.layout; val c = ref.coords?.takeIf { it.isAttached }
-                        if (l != null && c != null) tap(l.getOffsetForPosition(u.position), c.localToWindow(u.position))
+                        val l = ref.layout; val g = ref.glyphs; val c = ref.coords?.takeIf { it.isAttached }
+                        if (l != null && g != null && c != null) tap(l.drawnOffset(u.position, g), c.localToWindow(u.position))
                     }
                     return@awaitEachGesture
                 }
@@ -1340,20 +1375,75 @@ private fun ChapterEnd(next: String?, ink: Color, onNext: () -> Unit, onPosts: (
     }
 }
 
-/** Draws a rounded underline below every line segment of [r], following the text layout. */
-private fun DrawScope.underline(l: TextLayoutResult, r: IntRange, color: Color, thickness: Float, gap: Float) {
-    val len = l.layoutInput.text.length
-    if (len == 0) return
+/**
+ * Compose's position queries (getBoundingBox, getHorizontalPosition, getOffsetForPosition…) ignore justification: on a
+ * justified line they place text as if it were left-aligned, so anything drawn from them drifts left of the words,
+ * most at the right edge. Android stretches every plain space on the line by the same amount until the words, plus
+ * the hyphen of a word broken across lines, fill the width; this is how far that pushes the character at [offset].
+ */
+private fun TextLayoutResult.justifyShift(offset: Int, line: Int, g: Glyphs): Float {
+    if (layoutInput.style.textAlign != TextAlign.Justify) return 0f
+    val text = layoutInput.text
+    val start = getLineStart(line)
+    val end = getLineEnd(line)
+    // A paragraph's last line stays ragged.
+    if (end >= text.length || text[end - 1] == '\n') return 0f
+    val visEnd = getLineEnd(line, visibleEnd = true)
+    var spaces = 0; var before = 0
+    for (i in start until visEnd) if (text[i] == ' ') { spaces++; if (i < offset) before++ }
+    if (spaces == 0) return 0f
+    val hyphen = if (visEnd == end && text[end - 1].isLetter() && text[end].isLetter()) g.hyphen else 0f
+    val slack = size.width - naturalRight(visEnd - 1, line, g) - hyphen
+    return if (slack > 0f) slack / spaces * before else 0f
+}
+
+/**
+ * Unjustified right edge of the character at [i]. getBoundingBox reads it from where the next character starts, which
+ * for a line's last character is on the next line and comes back as the full line width, so measure that one instead.
+ */
+private fun TextLayoutResult.naturalRight(i: Int, line: Int, g: Glyphs): Float =
+    if (i + 1 < getLineEnd(line)) getBoundingBox(i).right else getBoundingBox(i).left + g.advance(layoutInput.text[i])
+
+/** Drawn left edge of the character at [i] on [line]. */
+private fun TextLayoutResult.drawnLeft(i: Int, line: Int, g: Glyphs) = getBoundingBox(i).left + justifyShift(i, line, g)
+
+/** Drawn right edge of the character at [i] on [line]. */
+private fun TextLayoutResult.drawnRight(i: Int, line: Int, g: Glyphs) = naturalRight(i, line, g) + justifyShift(i, line, g)
+
+/** Character offset under [p] in the drawn text, undoing [justifyShift]; a second pass settles guesses that cross a space. */
+private fun TextLayoutResult.drawnOffset(p: Offset, g: Glyphs): Int {
+    val line = getLineForVerticalPosition(p.y)
+    var o = getOffsetForPosition(p)
+    repeat(2) { o = getOffsetForPosition(Offset(p.x - justifyShift(o, line, g), p.y)) }
+    return o
+}
+
+/** Calls [block] with each line [r] (inclusive) touches and the drawn left and right edges of its part of that line. */
+private inline fun TextLayoutResult.forEachLineOf(r: IntRange, g: Glyphs, block: (line: Int, left: Float, right: Float) -> Unit) {
+    val len = layoutInput.text.length
+    if (len == 0 || r.isEmpty()) return
     val first = r.first.coerceIn(0, len - 1)
     val last = r.last.coerceIn(0, len - 1)
-    for (line in l.getLineForOffset(first)..l.getLineForOffset(last)) {
-        val a = maxOf(first, l.getLineStart(line))
-        val b = minOf(last, l.getLineEnd(line, visibleEnd = true) - 1)
+    for (line in getLineForOffset(first)..getLineForOffset(last)) {
+        val a = maxOf(first, getLineStart(line))
+        val b = minOf(last, getLineEnd(line, visibleEnd = true) - 1)
         if (b < a) continue
-        val y = l.getLineBaseline(line) + gap
-        drawLine(color, Offset(l.getBoundingBox(a).left, y), Offset(l.getBoundingBox(b).right, y), thickness, StrokeCap.Round)
+        block(line, drawnLeft(a, line, g), drawnRight(b, line, g))
     }
 }
+
+/** Fills the glyph band behind every line segment of [r]. */
+private fun DrawScope.fill(l: TextLayoutResult, g: Glyphs, r: IntRange, color: Color) =
+    l.forEachLineOf(r, g) { line, left, right ->
+        drawRect(color, Offset(left, l.getLineBaseline(line) - g.ascent), Size(right - left, g.ascent + g.descent))
+    }
+
+/** Draws a rounded underline below every line segment of [r], following the text layout. */
+private fun DrawScope.underline(l: TextLayoutResult, g: Glyphs, r: IntRange, color: Color, thickness: Float, gap: Float) =
+    l.forEachLineOf(r, g) { line, left, right ->
+        val y = l.getLineBaseline(line) + gap
+        drawLine(color, Offset(left, y), Offset(right, y), thickness, StrokeCap.Round)
+    }
 
 @Composable
 private fun SelectionBar(

@@ -2,6 +2,7 @@ package com.gbook.ui.components
 
 import androidx.compose.animation.core.animateFloatAsState
 import androidx.compose.foundation.background
+import androidx.compose.foundation.basicMarquee
 import androidx.compose.foundation.border
 import androidx.compose.foundation.clickable
 import androidx.compose.foundation.interaction.MutableInteractionSource
@@ -149,6 +150,8 @@ fun PillButton(
     tint: Color? = null,
     contentColor: Color = LocalG.current.text,
     enabled: Boolean = true,
+    /** Scroll a label too long for the pill back and forth instead of clipping it. */
+    scrollOverflow: Boolean = false,
 ) {
     Row(
         modifier.pressable(onClick, enabled).height(height).panel(CircleShape, tint).padding(horizontal = 20.dp),
@@ -159,7 +162,7 @@ fun PillButton(
         if (icon != null) {
             Icon(icon, null, tint = c, modifier = Modifier.size(20.dp)); Spacer(Modifier.width(8.dp))
         }
-        Text(text, color = c, fontSize = 17.sp, fontWeight = FontWeight.Medium, maxLines = 1)
+        Text(text, color = c, fontSize = 17.sp, fontWeight = FontWeight.Medium, maxLines = 1, modifier = if (scrollOverflow) Modifier.basicMarquee(iterations = Int.MAX_VALUE, initialDelayMillis = 1000) else Modifier)
     }
 }
 

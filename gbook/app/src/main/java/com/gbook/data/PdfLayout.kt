@@ -1,8 +1,14 @@
 package com.gbook.data
 
+import android.graphics.Bitmap
+import com.tom_roush.pdfbox.contentstream.operator.Operator
+import com.tom_roush.pdfbox.cos.COSBase
+import com.tom_roush.pdfbox.cos.COSName
 import com.tom_roush.pdfbox.pdmodel.PDPage
+import com.tom_roush.pdfbox.pdmodel.graphics.image.PDImageXObject
 import com.tom_roush.pdfbox.text.PDFTextStripper
 import com.tom_roush.pdfbox.text.TextPosition
+import java.io.File
 import kotlin.math.abs
 import kotlin.math.roundToInt
 
@@ -22,9 +28,22 @@ internal class PdfLine(val page: Int, val words: List<PdfWord>) {
     val caps = text.filter { it.isLetter() }.let { it.length >= 3 && it == it.uppercase() }
 }
 
-/** Collects every word of a document with its position, size and weight. */
-internal class WordCollector(private val onPageDone: (Int) -> Unit) : PDFTextStripper() {
+/**
+ * An image drawn on [page], saved as [file] in the book's images folder. [top] grows downwards like a word's
+ * baseline, so images and text sort into one reading order. [key] identifies the image data, which a PDF can
+ * draw on many pages.
+ */
+internal class PdfImage(val page: Int, val top: Float, val file: String, val key: Any, val fullPage: Boolean)
+
+/**
+ * Collects every word of a document with its position, size and weight, and, given an [imagesDir], the images
+ * drawn among the text.
+ */
+internal class WordCollector(private val imagesDir: File? = null, private val onPageDone: (Int) -> Unit) : PDFTextStripper() {
     private val words = ArrayList<PdfWord>()
+    private val drawn = ArrayList<PdfImage>()
+    /** Saved file for each image already decoded, so one drawn on many pages is decoded once. */
+    private val saved = HashMap<Any, String>()
     val pageHeights = ArrayList<Float>()
 
     init { sortByPosition = true }
@@ -37,6 +56,54 @@ internal class WordCollector(private val onPageDone: (Int) -> Unit) : PDFTextStr
     override fun endPage(page: PDPage) {
         super.endPage(page)
         onPageDone(currentPageNo)
+    }
+
+    override fun processOperator(operator: Operator, operands: MutableList<COSBase>) {
+        val dir = imagesDir
+        if (dir != null && operator.name == "Do") (operands.firstOrNull() as? COSName)?.let { runCatching { noteImage(it, dir) } }
+        super.processOperator(operator, operands)
+    }
+
+    private fun noteImage(name: COSName, dir: File) {
+        val res = resources ?: return
+        if (!res.isImageXObject(name)) return
+        val img = res.getXObject(name) as? PDImageXObject ?: return
+        val box = currentPage.cropBox
+        // The image fills the unit square of the current transform; its corners give where it lands on the page.
+        val m = graphicsState.currentTransformationMatrix
+        val corners = listOf(0f to 0f, 1f to 0f, 0f to 1f, 1f to 1f).map { (x, y) -> m.transformPoint(x, y) }
+        val w = corners.maxOf { it.x } - corners.minOf { it.x }
+        val h = corners.maxOf { it.y } - corners.minOf { it.y }
+        // Bullets, rules, icons and other ornaments.
+        if (w < 40f || h < 40f || img.width < 32 || img.height < 32) return
+        val key = img.cosObject
+        val file = saved[key] ?: save(img, dir, "pdf-${saved.size}")?.also { saved[key] = it } ?: return
+        val top = box.upperRightY - corners.maxOf { it.y }
+        drawn += PdfImage(currentPageNo - 1, top, file, key, fullPage = w >= box.width * 0.9f && h >= box.height * 0.9f)
+    }
+
+    /** Decodes [img] at up to 1600px on its long side and saves it, as PNG if it has transparency. */
+    private fun save(img: PDImageXObject, dir: File, base: String): String? {
+        val sub = maxOf(1, maxOf(img.width, img.height) / 1600)
+        val bmp = (if (sub > 1) img.getImage(null, sub) else img.image) ?: return null
+        val png = bmp.hasAlpha()
+        val name = base + if (png) ".png" else ".jpg"
+        File(dir, name).outputStream().use { bmp.compress(if (png) Bitmap.CompressFormat.PNG else Bitmap.CompressFormat.JPEG, 88, it) }
+        bmp.recycle()
+        return name
+    }
+
+    /**
+     * The images worth reading: not logos or backgrounds repeated on three or more pages, and not a full-page
+     * picture behind text (a scanned page with a text layer). Files of the rest are deleted.
+     */
+    fun images(): List<PdfImage> {
+        val pagesPerImage = drawn.groupBy { it.key }.mapValues { (_, l) -> l.map { it.page }.distinct().size }
+        val textPages = words.map { it.page }.toSet()
+        val (keep, drop) = drawn.partition { (pagesPerImage[it.key] ?: 0) < 3 && !(it.fullPage && it.page in textPages) }
+        val kept = keep.map { it.file }.toSet()
+        imagesDir?.let { dir -> drop.map { it.file }.filter { it !in kept }.distinct().forEach { File(dir, it).delete() } }
+        return keep.distinctBy { it.page to it.file }
     }
 
     override fun writeString(text: String, positions: MutableList<TextPosition>) {
@@ -113,7 +180,7 @@ internal class WordCollector(private val onPageDone: (Int) -> Unit) : PDFTextStr
  * Turns the lines of a PDF into EPUB-like blocks: paragraphs rebuilt from spacing and indents, headings found by
  * font size (and bold or all-caps lines at body size), and running headers, footers and page numbers dropped.
  */
-internal class PdfLayout(all: List<PdfLine>, private val pageHeights: List<Float>) {
+internal class PdfLayout(all: List<PdfLine>, private val pageHeights: List<Float>, private val images: List<PdfImage> = emptyList()) {
     /** Body text size: the size most characters are set in. */
     private val body: Float = all.groupBy { (it.size * 2).roundToInt() }
         .maxByOrNull { (_, ls) -> ls.sumOf { it.text.length } }?.key?.div(2f) ?: 11f
@@ -150,17 +217,19 @@ internal class PdfLayout(all: List<PdfLine>, private val pageHeights: List<Float
         return t.matches(Regex("(?i)(page\\s*)?[\\divxlcdm]{1,6}(\\s*(of|/)\\s*\\d+)?|[-–—]\\s*\\d+\\s*[-–—]")) || key(l) in repeated
     }
 
-    private sealed interface Item { val page: Int }
-    private class Heading(override val page: Int, val text: String, val size: Float, val sub: Boolean) : Item
-    private class Para(override val page: Int, val text: String) : Item
+    /** [y] is where the item starts on [page], for placing images between items. */
+    private sealed interface Item { val page: Int; val y: Float }
+    private class Heading(override val page: Int, override val y: Float, val text: String, val size: Float, val sub: Boolean) : Item
+    private class Para(override val page: Int, override val y: Float, val text: String) : Item
 
     /** Headings, sub-headings and paragraphs in reading order. */
     private val items: List<Item> by lazy {
         val out = ArrayList<Item>()
         var para: StringBuilder? = null
         var paraPage = 0
+        var paraY = 0f
         var prev: PdfLine? = null
-        fun endPara() { para?.let { if (it.isNotBlank()) out += Para(paraPage, it.toString()) }; para = null }
+        fun endPara() { para?.let { if (it.isNotBlank()) out += Para(paraPage, paraY, it.toString()) }; para = null }
 
         var i = 0
         while (i < lines.size) {
@@ -180,8 +249,8 @@ internal class PdfLayout(all: List<PdfLine>, private val pageHeights: List<Float
                     run += n
                 }
                 val text = run.joinToString(" ") { it.text }.trim()
-                if (text.split(' ').size > 14 || (text.endsWith('.') && !isLabel(text))) out += Para(l.page, text)
-                else out += Heading(l.page, text, l.size, sub = false)
+                if (text.split(' ').size > 14 || (text.endsWith('.') && !isLabel(text))) out += Para(l.page, l.y, text)
+                else out += Heading(l.page, l.y, text, l.size, sub = false)
                 i += run.size
                 prev = null
                 continue
@@ -191,7 +260,7 @@ internal class PdfLayout(all: List<PdfLine>, private val pageHeights: List<Float
             val words = l.text.split(' ').size
             if (standalone && words <= 12 && (l.caps || l.bold) && !l.text.trimEnd().endsWith('.') && !l.text.trimEnd().endsWith(',')) {
                 endPara()
-                out += Heading(l.page, l.text.trim(), l.size, sub = true)
+                out += Heading(l.page, l.y, l.text.trim(), l.size, sub = true)
                 i++
                 prev = null
                 continue
@@ -207,7 +276,7 @@ internal class PdfLayout(all: List<PdfLine>, private val pageHeights: List<Float
                 p.x1 < rightOf(p.page) - body * 2.5f && p.text.endsSentence() -> true
                 else -> false
             }
-            if (newPara) { endPara(); para = StringBuilder(l.text.trim()); paraPage = l.page }
+            if (newPara) { endPara(); para = StringBuilder(l.text.trim()); paraPage = l.page; paraY = l.y }
             else para!!.let { b ->
                 // Rejoin a word hyphenated across the line break.
                 if (b.endsWith("-") && l.text.firstOrNull()?.isLowerCase() == true) b.setLength(b.length - 1) else b.append(' ')
@@ -247,11 +316,25 @@ internal class PdfLayout(all: List<PdfLine>, private val pageHeights: List<Float
         else -> 2
     }
 
-    fun blocks(): List<Block> = items.map {
-        when (it) {
-            is Heading -> Block(1, it.text, level = level(it), page = it.page)
-            is Para -> Block(0, it.text, page = it.page)
+    /** Headings, paragraphs and images in reading order; an image goes before the first text below its top edge. */
+    fun blocks(): List<Block> {
+        val pics = images.sortedWith(compareBy({ it.page }, { it.top }))
+        val out = ArrayList<Block>()
+        var j = 0
+        fun imagesBefore(page: Int, y: Float) {
+            while (j < pics.size && (pics[j].page < page || pics[j].page == page && pics[j].top < y)) {
+                out += Block(2, src = pics[j].file, page = pics[j].page); j++
+            }
         }
+        for (it in items) {
+            imagesBefore(it.page, it.y)
+            out += when (it) {
+                is Heading -> Block(1, it.text, level = level(it), page = it.page)
+                is Para -> Block(0, it.text, page = it.page)
+            }
+        }
+        imagesBefore(Int.MAX_VALUE, 0f)
+        return out
     }
 
     /** Chapters starting at each run of chapter-level headings, or null if the headings don't divide the book. */

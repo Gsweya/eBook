@@ -102,7 +102,7 @@ class Importer(private val ctx: Context, private val store: Store, private val s
             PdfSupport.init(ctx)
             // Text from an older extractor, re-extracted now: keep the reader's place by page.
             val old = if (book.textReady) store.content(book.id) else null
-            val c = PdfSupport.extract(store.bookFile(book)) { p -> pdfProgress.value += book.id to p }
+            val c = PdfSupport.extract(store.bookFile(book), store.imagesDir(book.id)) { p -> pdfProgress.value += book.id to p }
             store.saveContent(book.id, c)
             store.updateBook(book.id) { b ->
                 b.copy(

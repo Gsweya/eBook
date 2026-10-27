@@ -37,18 +37,19 @@ object PdfSupport {
     }.getOrDefault("" to "")
 
     /** Bumped when extraction improves, so PDFs converted by an older version are converted again. */
-    const val TEXT_VERSION = 3
+    const val TEXT_VERSION = 4
 
     /**
      * Extracts reflowable text like an EPUB: paragraphs rebuilt from indents and spacing, headings found by font
-     * size and weight, running headers, footers and page numbers dropped, and chapters taken from the PDF outline
-     * or, failing that, from its chapter headings.
+     * size and weight, running headers, footers and page numbers dropped, figures and photos saved to [imagesDir]
+     * and placed where they sit among the text, and chapters taken from the PDF outline or, failing that, from
+     * its chapter headings.
      */
-    fun extract(file: File, onProgress: (Float) -> Unit = {}): BookContent = PDDocument.load(file).use { doc ->
+    fun extract(file: File, imagesDir: File, onProgress: (Float) -> Unit = {}): BookContent = PDDocument.load(file).use { doc ->
         val pageCount = doc.numberOfPages
-        val collector = WordCollector { p -> onProgress(p / pageCount.toFloat()) }
+        val collector = WordCollector(imagesDir) { p -> onProgress(p / pageCount.toFloat()) }
         runCatching { collector.getText(doc) }
-        val layout = PdfLayout(collector.lines(), collector.pageHeights)
+        val layout = PdfLayout(collector.lines(), collector.pageHeights, collector.images())
         val blocks = layout.blocks()
 
         val marks = runCatching {
@@ -73,7 +74,7 @@ object PdfSupport {
     /** Splits [blocks] into chapters covering the given (title, first page, end page) ranges. */
     private fun byPages(blocks: List<Block>, ranges: List<Triple<String, Int, Int>>): List<Chapter> = ranges.mapNotNull { (title, s, e) ->
         val body = blocks.filter { it.page in s until e }
-        if (body.none { it.type == 0 }) return@mapNotNull null
+        if (body.none { it.type == 0 || it.type == 2 }) return@mapNotNull null
         // Outline titles are often already the first heading on the page; don't repeat them.
         val head = if (body.firstOrNull()?.let { it.type == 1 && it.text.equals(title, ignoreCase = true) } == true) emptyList()
         else listOf(Block(1, title, level = 1, page = s))

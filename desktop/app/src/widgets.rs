@@ -331,36 +331,15 @@ pub fn clear(b: &gtk::Box) {
 
 /// Thin rounded progress bar filled with the accent.
 pub fn progress(fraction: f32, thick: bool) -> gtk::Widget {
-    let track = gtk::Overlay::new();
-    track.add_css_class("track");
+    let bar = gtk::ProgressBar::new();
+    bar.add_css_class("gbar");
     if thick {
-        track.add_css_class("thick");
+        bar.add_css_class("thick");
     }
-    let base = hbox(0);
-    base.set_hexpand(true);
-    track.set_child(Some(&base));
-    let bar = gtk::DrawingArea::new();
-    bar.add_css_class("bar");
-    bar.set_halign(gtk::Align::Start);
-    let frac = fraction.clamp(0.0, 1.0);
-    // The bar's width follows the track's allocation.
-    track.add_overlay(&bar);
-    track.set_measure_overlay(&bar, false);
-    let b2 = bar.clone();
-    track.connect_get_child_position(move |t, w| {
-        if w == b2.upcast_ref::<gtk::Widget>() {
-            let width = ((t.width() as f32) * frac).round() as i32;
-            Some(gtk::gdk::Rectangle::new(
-                0,
-                0,
-                width.max(if frac > 0.0 { t.height() } else { 0 }),
-                t.height(),
-            ))
-        } else {
-            None
-        }
-    });
-    track.upcast()
+    bar.set_fraction(fraction.clamp(0.0, 1.0) as f64);
+    bar.set_hexpand(true);
+    bar.set_valign(gtk::Align::Center);
+    bar.upcast()
 }
 
 /// Circular profile picture, or initials on the accent when there is none.

@@ -41,6 +41,8 @@ const MATTER: &[&str] = &[
 fn is_matter(ch: &Chapter) -> bool {
     let t = ch.title.trim().to_lowercase();
     MATTER.iter().any(|m| t.starts_with(m))
+        // Public-domain editions carry the publisher's licence and notes as chapters of their own.
+        || ["project gutenberg", "transcriber", "gutenberg license"].iter().any(|m| t.contains(m))
         || ch
             .blocks
             .iter()

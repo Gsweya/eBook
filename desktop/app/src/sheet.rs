@@ -94,6 +94,10 @@ pub fn present_with(
             rev.set_reveal_child(false);
             let (r, h) = (rev.clone(), host.clone());
             glib::timeout_add_local_once(Duration::from_millis(200), move || h.remove_overlay(&r));
+            // Don't hand focus to whatever comes first in the window (the sidebar's search field).
+            if let Some(w) = rev.root().and_downcast::<gtk::Window>() {
+                gtk::prelude::GtkWindowExt::set_focus(&w, None::<&gtk::Widget>);
+            }
         })
     };
     let c = close.clone();

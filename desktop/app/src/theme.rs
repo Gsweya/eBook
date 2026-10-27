@@ -581,6 +581,10 @@ button.plain:active {{ transform: scale(0.97); }}
 .emoji-dot {{ background: @chrome; border-radius: 999px; padding: 2px 4px; box-shadow: 0 1px 4px {shadow}; font-size: 14px; }}
 
 /* Progress bars and the 7-day chart. */
+progressbar.gbar > trough {{ background: @fill; border: none; border-radius: 999px; min-height: 4px; min-width: 0; margin: 0; }}
+progressbar.gbar > trough > progress {{ background-image: linear-gradient(to right, @accent_hi, @accent); background-color: @accent;
+  border: none; border-radius: 999px; min-height: 4px; min-width: 0; margin: 0; }}
+progressbar.gbar.thick > trough, progressbar.gbar.thick > trough > progress {{ min-height: 6px; }}
 .track {{ background: @fill; border-radius: 999px; min-height: 4px; }}
 .track.thick {{ min-height: 6px; }}
 .bar {{ background-image: linear-gradient(to right, @accent_hi, @accent); border-radius: 999px; min-height: 4px; }}

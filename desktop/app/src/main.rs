@@ -249,6 +249,7 @@ fn main() -> glib::ExitCode {
         let app = st.borrow().clone().expect("started");
         if app.window().is_none() {
             shell::build(gapp, &app);
+            import::add_starter(&app);
         }
         if let Some(w) = app.window() {
             w.present();

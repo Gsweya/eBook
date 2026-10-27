@@ -71,7 +71,8 @@ jobs:
         with:
           path: dist
           merge-multiple: true
+      # Adds the packages to the tag's release; its title and notes are written on GitHub.
       - uses: softprops/action-gh-release@v2
         with:
-          name: GBook for desktop ${{ github.ref_name }}
           files: dist/*
+          make_latest: false

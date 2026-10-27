@@ -79,6 +79,21 @@ Debug builds also bundle any `.epub`/`.pdf` files you put in `sample_books/` (gi
 
 `desktop/` is a native GTK 4 app in Rust with the same look and features as the phone: Library with reading stats, plans and collections, the EPUB reader with highlights, notes, reactions and the focus tracker, the Feed, Search, Settings and PDF page view. Wide windows get a sidebar like Apple Books on the Mac; narrow ones switch to the phone's layout and pill bar. The window has rounded corners and its own window buttons. It reads and writes the same `library.json` and backup `.zip` as Android, so a phone backup restores on the desktop and the other way round. Data lives in `~/.local/share/gbook`.
 
+<table>
+  <tr>
+    <td><img src="docs/screenshots/desktop/01-library.png" alt="Library with the sidebar"></td>
+    <td><img src="docs/screenshots/desktop/03-reader-options.png" alt="Reader with highlights and reading options"></td>
+  </tr>
+  <tr>
+    <td><img src="docs/screenshots/desktop/05-tracker.png" alt="Focus tracker on the Calm page theme"></td>
+    <td><img src="docs/screenshots/desktop/07-feed.png" alt="Feed"></td>
+  </tr>
+  <tr>
+    <td><img src="docs/screenshots/desktop/02-library-dark.png" alt="Dark mode"></td>
+    <td><img src="docs/screenshots/desktop/08-book.png" alt="Book page"></td>
+  </tr>
+</table>
+
 It's built to stay light: a 1.6 MB binary that uses the GTK, Pango and Poppler already on a GNOME desktop, about 250 ms to the first frame with 100 books, and 110–150 MB of memory while reading.
 
 Requires Rust, GTK 4.14+ and Poppler development files (`sudo dnf install gtk4-devel poppler-glib-devel` or `sudo apt install libgtk-4-dev libpoppler-glib-dev`).

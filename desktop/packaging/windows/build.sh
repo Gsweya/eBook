@@ -36,7 +36,15 @@ mkdir -p "$out/$loaders/loaders"
 cp "$prefix/$loaders/loaders/"*.dll "$out/$loaders/loaders/"
 for l in "$out/$loaders/loaders/"*.dll; do copy_deps "$l"; done
 # Listed with paths relative to the install folder, which gdk-pixbuf resolves wherever GBook is installed.
-(cd "$out" && gdk-pixbuf-query-loaders "$loaders"/loaders/*.dll > "$loaders/loaders.cache")
+# The tool writes absolute paths; strip the build folder so they're relative again.
+win_out="$(cygpath -m "$out")"
+(cd "$out" && gdk-pixbuf-query-loaders "$loaders"/loaders/*.dll) \
+    | sed -e "s|$win_out/||g" -e "s|$out/||g" \
+    > "$out/$loaders/loaders.cache"
+if grep -q "$win_out" "$out/$loaders/loaders.cache"; then
+    echo "loaders.cache still has absolute paths" >&2
+    exit 1
+fi
 
 # GTK's settings schemas, its fallback icons and fontconfig's configuration.
 mkdir -p "$out/share/glib-2.0/schemas"

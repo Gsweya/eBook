@@ -6,6 +6,7 @@
 // GTK signal handlers make for long closure types; naming each one wouldn't make them clearer.
 #![allow(clippy::type_complexity)]
 
+mod badge;
 mod booksheet;
 mod devtools;
 mod feed;

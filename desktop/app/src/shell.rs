@@ -1,5 +1,5 @@
-//! The window: Library, Feed, Settings and Search, reached from a sidebar on wide windows (as in Apple Books on
-//! the Mac) or the phone's floating pill bar on narrow ones; the reader on top of them; toasts; and the window's
+//! The window: Library, Feed, Settings and Search, reached from a sidebar on wide windows or the phone's
+//! floating pill bar on narrow ones; the reader on top of them; toasts; and the window's
 //! own rounded frame and buttons.
 
 use std::cell::{Cell, RefCell};
@@ -246,10 +246,12 @@ pub fn build(gapp: &gtk::Application, app: &AppRc) {
     let pages = gtk::Overlay::new();
     pages.set_child(Some(&tabs));
     pages.set_hexpand(true);
-    let nav = nav_bar(&shell);
+    let nav = nav_bar(&shell, &tabs);
     pages.add_overlay(&nav);
     *shell.nav_bar.borrow_mut() = Some(nav);
+    // The accent glow runs behind the sidebar too, so its frosted glass has something to show.
     let home = hbox(0);
+    home.add_css_class("backdrop-glow");
     let side = sidebar::build(app, &shell);
     home.append(&side);
     home.append(&pages);
@@ -285,25 +287,29 @@ pub fn build(gapp: &gtk::Application, app: &AppRc) {
     crate::devtools::run(&shell);
 }
 
-/// Close, minimise and maximise in the window's top-left corner, in the style of macOS: they show their
-/// symbols when hovered and turn grey while the window is in the background.
+/// Close, minimise and maximise in the window's top-left corner: three soft circles of the same colour, told
+/// apart by their symbols; close turns red and the others take the accent on hover.
 fn window_buttons(window: &gtk::ApplicationWindow) -> gtk::Widget {
     let row = hbox(8);
     row.add_css_class("wbtns");
     row.set_halign(gtk::Align::Start);
     row.set_valign(gtk::Align::Start);
+    let mut max_icon = None;
     for (class, ic, tip) in [
         ("close", "close", "Close"),
         ("min", "remove", "Minimise"),
-        ("max", "add", "Maximise"),
+        ("max", "crop-square", "Maximise"),
     ] {
         let b = gtk::Button::new();
         b.add_css_class("wbtn");
         b.add_css_class(class);
-        let i = icon(ic, 10);
+        let i = icon(ic, 13);
         b.set_child(Some(&i));
         b.set_tooltip_text(Some(tip));
         b.set_focusable(false);
+        if class == "max" {
+            max_icon = Some((i, b.clone()));
+        }
         let w = window.downgrade();
         b.connect_clicked(move |_| {
             let Some(w) = w.upgrade() else { return };
@@ -321,10 +327,22 @@ fn window_buttons(window: &gtk::ApplicationWindow) -> gtk::Widget {
         });
         row.append(&b);
     }
+    // Maximise shows one square; restore, two.
+    if let Some((i, b)) = max_icon {
+        window.connect_maximized_notify(move |w| {
+            let max = w.is_maximized();
+            i.set_icon_name(Some(if max {
+                "gbook-filter-none-symbolic"
+            } else {
+                "gbook-crop-square-symbolic"
+            }));
+            b.set_tooltip_text(Some(if max { "Restore" } else { "Maximise" }));
+        });
+    }
     row.upcast()
 }
 
-fn nav_bar(shell: &ShellRc) -> gtk::Widget {
+fn nav_bar(shell: &ShellRc, backdrop: &gtk::Stack) -> gtk::Widget {
     let row = hbox(10);
     row.add_css_class("navbar");
     row.set_halign(gtk::Align::Center);
@@ -349,15 +367,22 @@ fn nav_bar(shell: &ShellRc) -> gtk::Widget {
         pill.append(&b);
         nav.push((tab, b));
     }
-    row.append(&pill);
+    // Frosted glass over the page scrolling beneath.
+    let glass = crate::widgets::Frosted::new(backdrop, &pill);
+    glass.add_css_class("navglass");
+    row.append(&glass);
     let search = gtk::Button::new();
     search.add_css_class("navsearch");
     search.set_child(Some(&icon("search", 26)));
     search.set_tooltip_text(Some("Search (Ctrl+F)"));
     search.set_valign(gtk::Align::Center);
+    let search_glass = crate::widgets::Frosted::new(backdrop, &search);
+    search_glass.add_css_class("navglass");
+    search_glass.add_css_class("navsearch-glass");
+    search_glass.set_valign(gtk::Align::Center);
     let s = shell.clone();
     search.connect_clicked(move |_| s.select(Tab::Search));
-    row.append(&search);
+    row.append(&search_glass);
     nav.push((Tab::Search, search));
     *shell.nav.borrow_mut() = nav;
     row.upcast()
@@ -446,7 +471,6 @@ pub fn scrolled_page(
     scroller.set_hscrollbar_policy(gtk::PolicyType::Never);
     scroller.set_child(Some(content));
     let overlay = gtk::Overlay::new();
-    overlay.add_css_class("backdrop-glow");
     overlay.set_child(Some(&scroller));
     overlay.add_overlay(top);
     let dirty = Rc::new(Cell::new(true));

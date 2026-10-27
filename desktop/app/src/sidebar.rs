@@ -1,4 +1,4 @@
-//! The sidebar shown on wide windows, after Apple Books on the Mac: search, Home and Feed, the library's views,
+//! The sidebar shown on wide windows: search, Home and Feed, the library's views,
 //! every collection, and the profile and settings at the bottom. Narrow windows use the phone's pill bar instead.
 
 use std::rc::Rc;

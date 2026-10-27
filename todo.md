@@ -34,7 +34,7 @@ format. See the README's "Desktop app" section.
   chapters, Ctrl+T contents, F11 full screen
 - [x] Focus tracker: the wheel on the right edge (scroll, drag or click it; `.` and `,` keys), word or sentence
   steps, highlighting as it turns
-- [x] Sidebar on wide windows (Apple Books for Mac style), phone layout on narrow ones; rounded window with its
+- [x] Sidebar on wide windows, phone layout on narrow ones; rounded window with its
   own window buttons
 - [ ] Reading reminders (desktop notifications)
 

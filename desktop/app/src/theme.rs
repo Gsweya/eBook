@@ -255,7 +255,7 @@ pub struct ReaderTheme {
 
 pub const READER_THEMES: &[ReaderTheme] = &[
     ReaderTheme {
-        name: "Original",
+        name: "Classic",
         page: WHITE,
         text: BLACK,
         page_dark: BLACK,
@@ -263,7 +263,7 @@ pub const READER_THEMES: &[ReaderTheme] = &[
         bold: false,
     },
     ReaderTheme {
-        name: "Quiet",
+        name: "Dusk",
         page: h(0x4F4F51),
         text: h(0xB8B8BA),
         page_dark: BLACK,
@@ -287,7 +287,7 @@ pub const READER_THEMES: &[ReaderTheme] = &[
         bold: true,
     },
     ReaderTheme {
-        name: "Calm",
+        name: "Sepia",
         page: h(0xF3E6CC),
         text: h(0x3B2F1E),
         page_dark: h(0x3F392C),
@@ -295,7 +295,7 @@ pub const READER_THEMES: &[ReaderTheme] = &[
         bold: false,
     },
     ReaderTheme {
-        name: "Focus",
+        name: "Ivory",
         page: h(0xFDFDF8),
         text: h(0x222222),
         page_dark: h(0x17170F),
@@ -317,7 +317,7 @@ pub const HIGHLIGHT_COLORS: [Rgb; 5] = [
 ];
 pub const SELECTION: Rgb = h(0xA8C0F5);
 
-/// Bundled reading fonts: SIL Open Font License stand-ins for Apple Books' fonts, named in `like`.
+/// Bundled reading fonts, all under the SIL Open Font License; `like` names a familiar typeface each resembles.
 pub struct ReadingFont {
     pub id: &'static str,
     pub name: &'static str,
@@ -487,24 +487,23 @@ window.gbook.csd {{ border-radius: 14px; }}
 window.gbook.maximized, window.gbook.fullscreen, window.gbook.tiled, window.gbook.tiled-top,
 window.gbook.tiled-left, window.gbook.tiled-right, window.gbook.tiled-bottom {{ border-radius: 0; }}
 
-/* Our own window buttons, top left, in the macOS style. */
-.wbtns {{ margin: 25px 0 0 20px; }}
-button.wbtn {{ min-width: 13px; min-height: 13px; padding: 0; margin: 0; border-radius: 999px; border: none;
-  box-shadow: inset 0 0 0 0.5px rgba(0,0,0,0.18); color: rgba(0,0,0,0.6); }}
-button.wbtn image {{ opacity: 0; transition: opacity 120ms ease; }}
-.wbtns:hover button.wbtn image {{ opacity: 1; }}
-button.wbtn.close {{ background: #FF5F57; }}
-button.wbtn.min {{ background: #FEBC2E; }}
-button.wbtn.max {{ background: #28C840; }}
-button.wbtn:active {{ filter: brightness(0.85); }}
-window:backdrop button.wbtn {{ background: alpha(@text, 0.16); box-shadow: none; }}
+/* Our own window buttons, top left: one soft colour, told apart by their symbols. */
+.wbtns {{ margin: 21px 0 0 18px; }}
+button.wbtn {{ min-width: 22px; min-height: 22px; padding: 0; margin: 0; border-radius: 999px; border: none;
+  background: alpha(@text, 0.08); color: @text2; box-shadow: inset 0 0 0 1px alpha(@text, 0.06);
+  transition: background 120ms ease, color 120ms ease; }}
+button.wbtn:hover {{ background: alpha(@accent, 0.2); color: @accent; }}
+button.wbtn.close:hover {{ background: @destructive; color: white; }}
+button.wbtn:active {{ transform: scale(0.92); }}
+window:backdrop button.wbtn {{ color: alpha(@text2, 0.6); }}
 /* Room for them at the start of top bars that run under them. */
-window.gbook.narrow .topbar {{ padding-left: 90px; }}
-window.gbook.narrow .topbar.aligned {{ padding-left: 62px; }}
-.reader .topbar {{ padding-left: 90px; }}
+window.gbook.narrow .topbar {{ padding-left: 112px; }}
+window.gbook.narrow .topbar.aligned {{ padding-left: 84px; }}
+.reader .topbar {{ padding-left: 112px; }}
 
-/* The sidebar on wide windows, after Apple Books on the Mac. */
-.sidebar {{ background: {sidebar_bg}; box-shadow: inset -1px 0 {separator_soft}; }}
+/* The sidebar on wide windows. */
+.sidebar {{ background-color: {sidebar_glass}; background-image: linear-gradient(to bottom, {sheen}, transparent 45%);
+  box-shadow: inset -1px 0 {sidebar_rim}; }}
 .sidebar entry.side-search {{ min-height: 34px; border-radius: 10px; background: {search_bg}; }}
 .side-section {{ font-size: 12px; font-weight: 700; color: @text2; margin: 18px 10px 6px 10px; }}
 button.side-item {{ border-radius: 10px; padding: 7px 10px; min-height: 0; background: none; border: none;
@@ -606,12 +605,12 @@ progressbar.gbar.thick > trough, progressbar.gbar.thick > trough > progress {{ m
 .navbar {{ margin-bottom: 14px; }}
 .navpill {{ background: {nav_fill}; border-radius: 999px; padding: 4px;
   box-shadow: 0 8px 26px {shadow}, inset 0 1px {edge_top}, inset 0 0 0 1px {border}; }}
-.navpill button {{ min-width: 92px; min-height: 54px; border-radius: 999px; padding: 0 8px; border: none; box-shadow: none;
+.navpill > button {{ min-width: 92px; min-height: 54px; border-radius: 999px; padding: 0 8px; border: none; box-shadow: none;
   background: none; color: @text2; transition: background 220ms ease, color 220ms ease; }}
-.navpill button:hover {{ color: @text; }}
-.navpill button.active {{ background: alpha(@accent, 0.15); color: @accent; }}
-.navpill button label {{ font-size: 12px; font-weight: 500; }}
-.navpill button.active label {{ font-weight: 700; }}
+.navpill > button:hover {{ color: @text; }}
+.navpill > button.active {{ background: alpha(@accent, 0.15); color: @accent; }}
+.navpill > button label {{ font-size: 12px; font-weight: 500; }}
+.navpill > button.active label {{ font-weight: 700; }}
 .navsearch {{ min-width: 62px; min-height: 62px; border-radius: 999px; background: {nav_fill}; color: @text2; border: none;
   box-shadow: 0 8px 26px {shadow}, inset 0 1px {edge_top}, inset 0 0 0 1px {border}; }}
 .navsearch.active {{ background-image: linear-gradient(alpha(@accent, 0.15), alpha(@accent, 0.15)); color: @accent; }}
@@ -661,6 +660,23 @@ switch:checked {{ background: @accent; }}
 switch slider {{ background: white; border-radius: 999px; box-shadow: 0 1px 3px rgba(0,0,0,0.3); }}
 scrollbar {{ background: none; }}
 scrollbar slider {{ background: alpha(@text, 0.25); }}
+
+/* Frosted glass: the colour is the tint laid over the blurred page behind. */
+.frosted {{ color: {frost}; }}
+.frosted > * {{ color: @text; }}
+.reader-glass {{ border-radius: 999px; box-shadow: 0 8px 26px {shadow}, inset 0 1px {edge_top}, inset 0 0 0 1px {border}; }}
+.reader-pill {{ padding: 4px; }}
+.reader-pill > button {{ min-height: 40px; min-width: 42px; padding: 0 10px; border-radius: 999px; border: none; box-shadow: none;
+  background: none; color: @text; }}
+.reader-pill > button:hover {{ background: alpha(@text, 0.07); }}
+.reader-pill > button.size-small {{ font-size: 13px; padding: 0 8px; }}
+.reader-pill > button.size-big {{ font-size: 20px; padding: 0 8px; }}
+.reader-pill > .divider {{ background: alpha(@text, 0.14); min-width: 1px; min-height: 20px; margin: 0 2px; }}
+button.reading-badge {{ border-radius: 999px; padding: 2px 14px 2px 2px; min-height: 0; border: none; background: @chrome;
+  color: @text; box-shadow: 0 3px 10px {shadow}, inset 0 0 0 1px {border}; }}
+button.reading-badge:hover {{ background: mix(@chrome, @text, 0.05); }}
+.navglass {{ background-color: @bg; border-radius: 999px; box-shadow: 0 8px 26px {shadow}, inset 0 1px {edge_top}, inset 0 0 0 1px {border}; }}
+.navglass .navpill, .navglass .navsearch {{ background-color: transparent; box-shadow: none; }}
 
 /* Feed posts. */
 .post-frame {{ border-radius: 22px; }}
@@ -726,15 +742,20 @@ button.liked {{ color: #FF3B30; }}
         },
         cover_shadow = if d { 0.55 } else { 0.30 },
         scrim = if d { 0.55 } else { 0.32 },
-        sidebar_bg = if d {
-            c.bg.lerp(WHITE, 0.045).css()
+        sidebar_glass = if d {
+            WHITE.alpha(0.035)
         } else {
-            c.bg.lerp(BLACK, 0.035).css()
+            WHITE.alpha(0.5)
         },
-        separator_soft = if d {
-            WHITE.alpha(0.06)
+        sidebar_rim = if d {
+            WHITE.alpha(0.07)
         } else {
-            BLACK.alpha(0.07)
+            BLACK.alpha(0.06)
+        },
+        frost = if d {
+            h(0x1C1C1E).alpha(0.62)
+        } else {
+            WHITE.alpha(0.6)
         },
         search_bg = if d {
             WHITE.alpha(0.07)
@@ -762,6 +783,7 @@ fn reader_css(dark: bool) -> String {
 .reader.t{i} .page-fade-top {{ background-image: linear-gradient(to bottom, {p} 62%, {p0}); }}
 .reader.t{i} .page-fade-bottom {{ background-image: linear-gradient(to top, {p} 58%, {p0}); }}
 .reader.t{i} .page-mask, .reader.t{i} .page-fade-top.solid {{ background: {p}; }}
+.reader.t{i} .reader-glass {{ background-color: {p}; }}
 .reader.t{i} .faint {{ color: {faint}; }}
 .reader.t{i} .ink {{ color: {ink}; }}
 .reader.t{i} .progress-line {{ background: {line}; }}

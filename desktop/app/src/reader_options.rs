@@ -1,5 +1,5 @@
-//! Reading options, from the reader's top-right button: a live preview, shortcuts to contents, highlights,
-//! search and posts, then text size, font, spacing, margins, page theme and page turning.
+//! The reader's two panels, opened from its bottom pill: Text (a live preview, size, font, spacing, margins,
+//! weight and alignment) and Reading options (highlights, posts, page theme, page turning, focus tracker).
 
 use std::rc::Rc;
 
@@ -7,12 +7,13 @@ use gbook_core::ReaderSettings;
 use gtk::prelude::*;
 use gtk::{glib, pango};
 
-use crate::reader::{MAX_FONT, MIN_FONT, Reader, contents_sheet, search_sheet};
+use crate::reader::{MAX_FONT, MIN_FONT, Reader, contents_sheet};
 use crate::state::AppRc;
 use crate::theme::{self, READER_THEMES, READING_FONTS};
 use crate::widgets::*;
 
-pub fn show(r: &Rc<Reader>, anchor: &gtk::Button) {
+/// Opens the Text panel (`text`) or Reading options above `anchor`.
+pub fn show(r: &Rc<Reader>, anchor: &gtk::Button, text: bool) -> gtk::Popover {
     let content = vbox(14);
     content.set_size_request(400, -1);
     // Room for the scrollbar, so it never covers the right-hand controls.
@@ -29,12 +30,12 @@ pub fn show(r: &Rc<Reader>, anchor: &gtk::Button) {
     );
     scroller.set_child(Some(&content));
     let pop = popover(anchor, &scroller, true);
-    pop.set_position(gtk::PositionType::Bottom);
+    pop.set_position(gtk::PositionType::Top);
     let render = {
         let (r, content, pop) = (r.clone(), content.clone(), pop.clone());
         move || {
             clear(&content);
-            build(&r, &content, &pop);
+            build(&r, &content, &pop, text);
         }
     };
     render();
@@ -42,171 +43,182 @@ pub fn show(r: &Rc<Reader>, anchor: &gtk::Button) {
     let a = r.app().clone();
     pop.connect_closed(move |_| a.remove_listener(id));
     pop.popup();
+    pop
 }
 
-fn build(r: &Rc<Reader>, content: &gtk::Box, pop: &gtk::Popover) {
+fn build(r: &Rc<Reader>, content: &gtk::Box, pop: &gtk::Popover, text: bool) {
     let app = r.app().clone();
     let s = r.settings();
-    content.append(&label("Reading options", &["sheet-title"]));
-    content.append(&preview(&s, &r.preview_text()));
+    content.append(&label(
+        if text { "Text" } else { "Reading options" },
+        &["sheet-title"],
+    ));
+    if text {
+        content.append(&preview(&s, &r.preview_text()));
+    }
 
-    let tiles = hbox(8);
-    tiles.set_homogeneous(true);
-    let items: [(&str, &str, String, Rc<dyn Fn()>); 4] = [
-        (
-            "format-list-bulleted",
-            "Contents",
-            format!("{}%", r.progress_percent()),
-            {
+    if !text {
+        let tiles = hbox(8);
+        tiles.set_homogeneous(true);
+        let items: [(&str, &str, String, Rc<dyn Fn()>); 3] = [
+            (
+                "format-quote",
+                "Highlights",
+                r.highlight_count().to_string(),
+                {
+                    let (r, p) = (r.clone(), pop.clone());
+                    Rc::new(move || {
+                        p.popdown();
+                        contents_sheet(&r, 1)
+                    })
+                },
+            ),
+            ("auto-awesome", "Posts", String::new(), {
                 let (r, p) = (r.clone(), pop.clone());
                 Rc::new(move || {
                     p.popdown();
-                    contents_sheet(&r, 0)
+                    crate::feed::generate_sheet(r.app(), Some(&r.book_id))
                 })
-            },
-        ),
-        (
-            "format-quote",
-            "Highlights",
-            r.highlight_count().to_string(),
-            {
+            }),
+            ("ios-share", "Share", String::new(), {
                 let (r, p) = (r.clone(), pop.clone());
                 Rc::new(move || {
                     p.popdown();
-                    contents_sheet(&r, 1)
+                    let (title, author) = r
+                        .app()
+                        .data()
+                        .book(&r.book_id)
+                        .map(|b| (b.title.clone(), b.author.clone()))
+                        .unwrap_or_default();
+                    if let Some(w) = r.app().window() {
+                        w.clipboard()
+                            .set_text(&format!("I'm reading “{title}” by {author} on GBook"));
+                    }
+                    r.app().toast("Copied to share");
                 })
-            },
-        ),
-        ("search", "Search", String::new(), {
-            let (r, p) = (r.clone(), pop.clone());
-            Rc::new(move || {
-                p.popdown();
-                search_sheet(&r)
-            })
-        }),
-        ("auto-awesome", "Posts", String::new(), {
-            let (r, p) = (r.clone(), pop.clone());
-            Rc::new(move || {
-                p.popdown();
-                crate::feed::generate_sheet(r.app(), Some(&r.book_id))
-            })
-        }),
-    ];
-    for (ic, name, badge, f) in items {
-        let b = gtk::Button::new();
-        b.add_css_class("option-tile");
-        let v = vbox(4);
-        v.append(&icon(ic, 22));
-        let l = label(name, &["small", "semibold"]);
-        l.set_xalign(0.5);
-        v.append(&l);
-        let bl = label(&badge, &["small", "text2"]);
-        bl.set_xalign(0.5);
-        v.append(&bl);
-        b.set_child(Some(&v));
-        b.connect_clicked(move |_| f());
-        tiles.append(&b);
-    }
-    content.append(&tiles);
-
-    content.append(&label("TEXT & PAGE", &["eyebrow"]));
-    // A | size | A stepper
-    let seg = hbox(0);
-    seg.add_css_class("segment");
-    seg.set_homogeneous(false);
-    let smaller = gtk::Button::with_label("A");
-    smaller.set_hexpand(true);
-    smaller.set_sensitive(s.font_size > MIN_FONT);
-    let r2 = r.clone();
-    smaller.connect_clicked(move |_| r2.change_font(-1.0));
-    let bigger = gtk::Button::new();
-    let big = gtk::Label::new(Some("A"));
-    big.set_attributes(Some(&size_attrs(24)));
-    bigger.set_child(Some(&big));
-    bigger.set_hexpand(true);
-    bigger.set_sensitive(s.font_size < MAX_FONT);
-    let r2 = r.clone();
-    bigger.connect_clicked(move |_| r2.change_font(1.0));
-    let size = label(&format!("{}", s.font_size as i32), &["text2"]);
-    size.set_margin_start(14);
-    size.set_margin_end(14);
-    let div = || {
-        let d = vbox(0);
-        d.add_css_class("divider");
-        d.set_valign(gtk::Align::Center);
-        d
-    };
-    seg.append(&smaller);
-    seg.append(&div());
-    seg.append(&size);
-    seg.append(&div());
-    seg.append(&bigger);
-    content.append(&seg);
-
-    content.append(&font_picker(&app, &s));
-    content.append(&slider_row(
-        &app,
-        "format-line-spacing",
-        "Line spacing",
-        &format!("{:.1}×", s.line_height),
-        1.1,
-        2.2,
-        0.05,
-        s.line_height as f64,
-        |d, v| d.settings.line_height = (v * 20.0).round() as f32 / 20.0,
-    ));
-    content.append(&slider_row(
-        &app,
-        "format-indent-increase",
-        "Margins",
-        &s.margin.to_string(),
-        8.0,
-        64.0,
-        1.0,
-        s.margin as f64,
-        |d, v| d.settings.margin = v.round() as i32,
-    ));
-    let presets = hbox(8);
-    presets.set_margin_start(34);
-    for (name, v) in [
-        ("Narrow", 8),
-        ("Normal", 24),
-        ("Wide", 44),
-        ("Extra wide", 64),
-    ] {
-        let b = gtk::Button::with_label(name);
-        b.add_css_class("chip");
-        if s.margin == v {
-            b.add_css_class("on");
+            }),
+        ];
+        for (ic, name, badge, f) in items {
+            let b = gtk::Button::new();
+            b.add_css_class("option-tile");
+            let v = vbox(4);
+            v.append(&icon(ic, 22));
+            let l = label(name, &["small", "semibold"]);
+            l.set_xalign(0.5);
+            v.append(&l);
+            let bl = label(&badge, &["small", "text2"]);
+            bl.set_xalign(0.5);
+            v.append(&bl);
+            b.set_child(Some(&v));
+            b.connect_clicked(move |_| f());
+            tiles.append(&b);
         }
-        let a = app.clone();
-        b.connect_clicked(move |_| a.update(|d| d.settings.margin = v));
-        presets.append(&b);
+        content.append(&tiles);
     }
-    content.append(&presets);
 
-    let toggles = hbox(8);
-    for (name, on, f) in [
-        (
-            "Bold text",
-            s.bold,
-            (|d: &mut gbook_core::LibraryData| d.settings.bold = !d.settings.bold)
-                as fn(&mut gbook_core::LibraryData),
-        ),
-        ("Justify", s.justify, |d| {
-            d.settings.justify = !d.settings.justify
-        }),
-    ] {
-        let b = gtk::Button::with_label(name);
-        b.add_css_class("chip");
-        if on {
-            b.add_css_class("on");
+    if text {
+        content.append(&label("SIZE", &["eyebrow"]));
+        // A | size | A stepper
+        let seg = hbox(0);
+        seg.add_css_class("segment");
+        seg.set_homogeneous(false);
+        let smaller = gtk::Button::with_label("A");
+        smaller.set_hexpand(true);
+        smaller.set_sensitive(s.font_size > MIN_FONT);
+        let r2 = r.clone();
+        smaller.connect_clicked(move |_| r2.change_font(-1.0));
+        let bigger = gtk::Button::new();
+        let big = gtk::Label::new(Some("A"));
+        big.set_attributes(Some(&size_attrs(24)));
+        bigger.set_child(Some(&big));
+        bigger.set_hexpand(true);
+        bigger.set_sensitive(s.font_size < MAX_FONT);
+        let r2 = r.clone();
+        bigger.connect_clicked(move |_| r2.change_font(1.0));
+        let size = label(&format!("{}", s.font_size as i32), &["text2"]);
+        size.set_margin_start(14);
+        size.set_margin_end(14);
+        let div = || {
+            let d = vbox(0);
+            d.add_css_class("divider");
+            d.set_valign(gtk::Align::Center);
+            d
+        };
+        seg.append(&smaller);
+        seg.append(&div());
+        seg.append(&size);
+        seg.append(&div());
+        seg.append(&bigger);
+        content.append(&seg);
+
+        content.append(&font_picker(&app, &s));
+        content.append(&slider_row(
+            &app,
+            "format-line-spacing",
+            "Line spacing",
+            &format!("{:.1}×", s.line_height),
+            1.1,
+            2.2,
+            0.05,
+            s.line_height as f64,
+            |d, v| d.settings.line_height = (v * 20.0).round() as f32 / 20.0,
+        ));
+        content.append(&slider_row(
+            &app,
+            "format-indent-increase",
+            "Margins",
+            &s.margin.to_string(),
+            8.0,
+            64.0,
+            1.0,
+            s.margin as f64,
+            |d, v| d.settings.margin = v.round() as i32,
+        ));
+        let presets = hbox(8);
+        presets.set_margin_start(34);
+        for (name, v) in [
+            ("Narrow", 8),
+            ("Normal", 24),
+            ("Wide", 44),
+            ("Extra wide", 64),
+        ] {
+            let b = gtk::Button::with_label(name);
+            b.add_css_class("chip");
+            if s.margin == v {
+                b.add_css_class("on");
+            }
+            let a = app.clone();
+            b.connect_clicked(move |_| a.update(|d| d.settings.margin = v));
+            presets.append(&b);
         }
-        let a = app.clone();
-        b.connect_clicked(move |_| a.update(f));
-        toggles.append(&b);
+        content.append(&presets);
+
+        let toggles = hbox(8);
+        for (name, on, f) in [
+            (
+                "Bold text",
+                s.bold,
+                (|d: &mut gbook_core::LibraryData| d.settings.bold = !d.settings.bold)
+                    as fn(&mut gbook_core::LibraryData),
+            ),
+            ("Justify", s.justify, |d| {
+                d.settings.justify = !d.settings.justify
+            }),
+        ] {
+            let b = gtk::Button::with_label(name);
+            b.add_css_class("chip");
+            if on {
+                b.add_css_class("on");
+            }
+            let a = app.clone();
+            b.connect_clicked(move |_| a.update(f));
+            toggles.append(&b);
+        }
+        content.append(&toggles);
     }
-    content.append(&toggles);
+    if text {
+        return;
+    }
 
     content.append(&label("THEMES", &["eyebrow"]));
     let grid = gtk::Grid::new();

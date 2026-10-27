@@ -39,6 +39,13 @@ pub struct Reader {
     /// Paragraph characters before each chapter, and in total at the end, for progress and page estimates.
     chars_before: Vec<i64>,
     title_text: Marquee,
+    badge: Rc<crate::badge::Badge>,
+    pill_rev: gtk::Revealer,
+    size_label: gtk::Label,
+    /// Bumped on every mouse move; the pill hides when it's been still for a while.
+    pill_gen: Rc<Cell<u32>>,
+    /// The pill stays up while the pointer is on it or one of its panels is open.
+    pill_hold: Rc<Cell<bool>>,
     page_label: gtk::Label,
     left_label: gtk::Label,
     progress_fill: gtk::Box,
@@ -147,7 +154,7 @@ pub fn open(
     fade_bottom.set_can_target(false);
     root.add_overlay(&fade_bottom);
 
-    // Top bar: back, the chapter (opens the contents), search and reading options.
+    // Top bar: back, the chapter (it opens the contents), and today's reading on the right.
     let back = circle_button("arrow-back-ios-new", "Back to Library (Esc)");
     let title = gtk::Button::new();
     title.add_css_class("flat");
@@ -159,14 +166,8 @@ pub fn open(
     title.set_tooltip_text(Some("Contents"));
     let start = hbox(8);
     start.append(&back);
-    let end = hbox(10);
-    let search_btn = circle_button("search", "Search in book (Ctrl+F)");
-    let contents_btn = circle_button("format-list-bulleted", "Contents and highlights");
-    let options_btn = circle_button("tune", "Reading options");
-    end.append(&contents_btn);
-    end.append(&search_btn);
-    end.append(&options_btn);
-    let top = top_bar(&start, Some(title.upcast_ref()), &end, true, None);
+    let badge = crate::badge::Badge::new(app, &book.id);
+    let top = top_bar(&start, Some(title.upcast_ref()), &badge.button, true, None);
     root.add_overlay(&top);
 
     // Bottom: page number, pages left in the chapter, and a thin line through the whole book.
@@ -194,6 +195,59 @@ pub fn open(
     bottom.append(&progress_line);
     root.add_overlay(&bottom);
 
+    // Quick actions in a frosted pill at the bottom: search, text size (its number opens every text option),
+    // contents, and the reading options. It fades away while you read and comes back when the mouse moves.
+    let pill = hbox(2);
+    pill.add_css_class("reader-pill");
+    let pill_btn = |ic: &str, tip: &str| {
+        let b = gtk::Button::new();
+        b.set_child(Some(&icon(ic, 20)));
+        b.set_tooltip_text(Some(tip));
+        b
+    };
+    let divider = || {
+        let d = vbox(0);
+        d.add_css_class("divider");
+        d.set_valign(gtk::Align::Center);
+        d
+    };
+    let search_btn = pill_btn("search", "Search in book (Ctrl+F)");
+    let smaller = gtk::Button::with_label("A");
+    smaller.add_css_class("size-small");
+    smaller.set_tooltip_text(Some("Smaller text (Ctrl −)"));
+    let size_btn = gtk::Button::new();
+    let size_row = hbox(4);
+    let size_label = label("", &["semibold"]);
+    size_row.append(&size_label);
+    size_row.append(&icon("keyboard-arrow-down", 16));
+    size_btn.set_child(Some(&size_row));
+    size_btn.set_tooltip_text(Some("Text: font, spacing, margins"));
+    let bigger = gtk::Button::with_label("A");
+    bigger.add_css_class("size-big");
+    bigger.set_tooltip_text(Some("Larger text (Ctrl +)"));
+    let contents_btn = pill_btn("format-list-bulleted", "Contents and highlights (Ctrl+T)");
+    let options_btn = pill_btn("tune", "Reading options");
+    pill.append(&search_btn);
+    pill.append(&divider());
+    pill.append(&smaller);
+    pill.append(&size_btn);
+    pill.append(&bigger);
+    pill.append(&divider());
+    pill.append(&contents_btn);
+    pill.append(&divider());
+    pill.append(&options_btn);
+    let glass = Frosted::new(&scroller, &pill);
+    glass.add_css_class("reader-glass");
+    let pill_rev = gtk::Revealer::new();
+    pill_rev.set_transition_type(gtk::RevealerTransitionType::Crossfade);
+    pill_rev.set_transition_duration(220);
+    pill_rev.set_child(Some(&glass));
+    pill_rev.set_halign(gtk::Align::Center);
+    pill_rev.set_valign(gtk::Align::End);
+    pill_rev.set_margin_bottom(34);
+    pill_rev.set_reveal_child(true);
+    root.add_overlay(&pill_rev);
+
     let hud_label = gtk::Label::new(None);
     hud_label.add_css_class("reader-hud");
     let hud = gtk::Revealer::new();
@@ -220,6 +274,11 @@ pub fn open(
         starts: RefCell::new(Vec::new()),
         chars_before,
         title_text,
+        badge,
+        pill_rev: pill_rev.clone(),
+        size_label,
+        pill_gen: Rc::new(Cell::new(0)),
+        pill_hold: Rc::new(Cell::new(false)),
         page_label,
         left_label,
         progress_fill,
@@ -265,7 +324,23 @@ pub fn open(
     let w = Rc::downgrade(&r);
     search_btn.connect_clicked(move |_| with(&w, search_sheet));
     let w = Rc::downgrade(&r);
-    options_btn.connect_clicked(move |b| with(&w, |r| reader_options::show(r, b)));
+    options_btn
+        .connect_clicked(move |b| with(&w, |r| r.hold_pill(reader_options::show(r, b, false))));
+    let w = Rc::downgrade(&r);
+    size_btn.connect_clicked(move |b| with(&w, |r| r.hold_pill(reader_options::show(r, b, true))));
+    let w = Rc::downgrade(&r);
+    smaller.connect_clicked(move |_| with(&w, |r| r.change_font(-1.0)));
+    let w = Rc::downgrade(&r);
+    bigger.connect_clicked(move |_| with(&w, |r| r.change_font(1.0)));
+    let hover = gtk::EventControllerMotion::new();
+    let hold = r.pill_hold.clone();
+    hover.connect_enter(move |_, _, _| hold.set(true));
+    let (hold, w) = (r.pill_hold.clone(), Rc::downgrade(&r));
+    hover.connect_leave(move |_| {
+        hold.set(false);
+        with(&w, |r| r.wake_pill());
+    });
+    glass.add_controller(hover);
 
     let w = Rc::downgrade(&r);
     sizer.connect_resize(move |_, width, _| with(&w, |r| r.fit_column(width)));
@@ -407,6 +482,10 @@ impl Reader {
     }
 
     fn on_data_changed(self: &Rc<Self>) {
+        self.badge.refresh_avatar(&self.app);
+        self.badge.update(&self.app, self.unsaved_ms.get());
+        self.size_label
+            .set_text(&format!("{}", self.settings().font_size as i32));
         if self.app.data().book(&self.book_id).is_none() {
             return;
         }
@@ -576,6 +655,7 @@ impl Reader {
         self.view.set_buffer(Some(&buffer));
         self.view.add_child_at_anchor(&self.chapter_end(), &anchor);
         self.title_text.set_text(&ch.title);
+        self.size_label.set_text(&format!("{}", s.font_size as i32));
         self.apply_highlights();
 
         let (b, off) = self.pending.take().unwrap_or((0, 0));
@@ -1008,6 +1088,7 @@ impl Reader {
 
     fn tick(&self) {
         self.accrue();
+        self.badge.update(&self.app, self.unsaved_ms.get());
         if self.unsaved_ms.get() >= 30_000 {
             self.flush_time();
         }
@@ -1034,6 +1115,35 @@ impl Reader {
             if g.get() == generation {
                 h.set_reveal_child(false);
             }
+        });
+    }
+
+    /// Shows the bottom pill, and hides it again after a few still seconds.
+    fn wake_pill(&self) {
+        self.pill_rev.set_reveal_child(true);
+        let generation = self.pill_gen.get().wrapping_add(1);
+        self.pill_gen.set(generation);
+        let (g, hold, rev) = (
+            self.pill_gen.clone(),
+            self.pill_hold.clone(),
+            self.pill_rev.clone(),
+        );
+        glib::timeout_add_local_once(Duration::from_millis(2800), move || {
+            if g.get() == generation && !hold.get() {
+                rev.set_reveal_child(false);
+            }
+        });
+    }
+
+    /// Keeps the pill up while one of its panels is open.
+    fn hold_pill(self: &Rc<Self>, pop: gtk::Popover) {
+        self.pill_hold.set(true);
+        let w = Rc::downgrade(self);
+        pop.connect_closed(move |_| {
+            with(&w, |r| {
+                r.pill_hold.set(false);
+                r.wake_pill();
+            })
         });
     }
 
@@ -1170,7 +1280,12 @@ impl Reader {
         self.view.add_controller(legacy);
         let motion = gtk::EventControllerMotion::new();
         let w = Rc::downgrade(self);
-        motion.connect_motion(move |_, _, _| with(&w, |r| r.touch()));
+        motion.connect_motion(move |_, _, _| {
+            with(&w, |r| {
+                r.touch();
+                r.wake_pill();
+            })
+        });
         root.add_controller(motion);
     }
 
@@ -1727,10 +1842,6 @@ impl Reader {
             .unwrap_or_else(|| {
                 "Do not act as if thou wert going to live ten thousand years.".into()
             })
-    }
-
-    pub fn progress_percent(&self) -> i32 {
-        (self.progress() * 100.0) as i32
     }
 
     pub fn highlight_count(&self) -> usize {

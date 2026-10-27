@@ -607,3 +607,129 @@ impl Marquee {
         self.widget.hadjustment().set_value(0.0);
     }
 }
+
+// ---------------------------------------------------------------------------------------------------------
+// Frosted: frosted glass. Paints the part of a backdrop widget that lies behind it, blurred, under a
+// translucent tint (its CSS `color`), then its child. Its CSS background must be the opaque colour behind the
+// backdrop (the page), or the sharp content would show through the blur. Used for the bars over scrolling text.
+
+mod frosted_imp {
+    use super::*;
+
+    pub struct Frosted {
+        pub child: RefCell<Option<gtk::Widget>>,
+        pub backdrop: glib::WeakRef<gtk::Widget>,
+        pub paintable: RefCell<Option<gtk::WidgetPaintable>>,
+        pub radius: Cell<f32>,
+        pub blur: Cell<f32>,
+    }
+
+    impl Default for Frosted {
+        fn default() -> Self {
+            Frosted {
+                child: RefCell::new(None),
+                backdrop: glib::WeakRef::new(),
+                paintable: RefCell::new(None),
+                radius: Cell::new(999.0),
+                blur: Cell::new(18.0),
+            }
+        }
+    }
+
+    #[glib::object_subclass]
+    impl ObjectSubclass for Frosted {
+        const NAME: &'static str = "GBookFrosted";
+        type Type = super::Frosted;
+        type ParentType = gtk::Widget;
+    }
+
+    impl ObjectImpl for Frosted {
+        fn dispose(&self) {
+            if let Some(c) = self.child.take() {
+                c.unparent();
+            }
+        }
+    }
+
+    impl WidgetImpl for Frosted {
+        fn request_mode(&self) -> gtk::SizeRequestMode {
+            self.child
+                .borrow()
+                .as_ref()
+                .map(|c| c.request_mode())
+                .unwrap_or(gtk::SizeRequestMode::ConstantSize)
+        }
+
+        fn measure(&self, orientation: gtk::Orientation, for_size: i32) -> (i32, i32, i32, i32) {
+            match self.child.borrow().as_ref() {
+                Some(c) => c.measure(orientation, for_size),
+                None => (0, 0, -1, -1),
+            }
+        }
+
+        fn size_allocate(&self, width: i32, height: i32, baseline: i32) {
+            if let Some(c) = self.child.borrow().as_ref() {
+                c.allocate(width, height, baseline, None);
+            }
+        }
+
+        fn snapshot(&self, s: &gtk::Snapshot) {
+            let obj = self.obj();
+            let (w, h) = (obj.width() as f32, obj.height() as f32);
+            let rect = graphene::Rect::new(0.0, 0.0, w, h);
+            let r = self.radius.get().min(h / 2.0).min(w / 2.0);
+            let corner = graphene::Size::new(r, r);
+            s.push_rounded_clip(&gsk::RoundedRect::new(rect, corner, corner, corner, corner));
+            if let (Some(p), Some(back)) =
+                (self.paintable.borrow().as_ref(), self.backdrop.upgrade())
+                && let Some(b) = obj.compute_bounds(&back)
+            {
+                let blur = self.blur.get();
+                s.push_blur(blur as f64);
+                // Only the area just around the glass goes through the blur.
+                s.push_clip(&graphene::Rect::new(
+                    -blur * 2.0,
+                    -blur * 2.0,
+                    w + blur * 4.0,
+                    h + blur * 4.0,
+                ));
+                s.save();
+                s.translate(&graphene::Point::new(-b.x(), -b.y()));
+                p.snapshot(s, back.width() as f64, back.height() as f64);
+                s.restore();
+                s.pop();
+                s.pop();
+            }
+            s.append_color(&obj.color(), &rect);
+            s.pop();
+            if let Some(c) = self.child.borrow().as_ref() {
+                obj.snapshot_child(c, s);
+            }
+        }
+    }
+}
+
+glib::wrapper! {
+    pub struct Frosted(ObjectSubclass<frosted_imp::Frosted>) @extends gtk::Widget, @implements gtk::Accessible, gtk::Buildable, gtk::ConstraintTarget;
+}
+
+impl Frosted {
+    /// Frosted glass over `backdrop` (a widget painted behind this one) holding `child`.
+    pub fn new(backdrop: &impl IsA<gtk::Widget>, child: &impl IsA<gtk::Widget>) -> Frosted {
+        let f: Frosted = glib::Object::new();
+        f.add_css_class("frosted");
+        child.set_parent(&f);
+        *f.imp().child.borrow_mut() = Some(child.clone().upcast());
+        f.imp().backdrop.set(Some(backdrop.upcast_ref()));
+        let p = gtk::WidgetPaintable::new(Some(backdrop));
+        // Redraw the glass whenever what's behind it changes, e.g. while the page scrolls.
+        let weak = f.downgrade();
+        p.connect_invalidate_contents(move |_| {
+            if let Some(f) = weak.upgrade() {
+                f.queue_draw();
+            }
+        });
+        *f.imp().paintable.borrow_mut() = Some(p);
+        f
+    }
+}

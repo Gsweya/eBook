@@ -77,20 +77,20 @@ Debug builds also bundle any `.epub`/`.pdf` files you put in `sample_books/` (gi
 
 ## Desktop app (Linux and Windows)
 
-`desktop/` is a native GTK 4 app in Rust with the same look and features as the phone: Library with reading stats, plans and collections, the EPUB reader with highlights, notes, reactions and the focus tracker, the Feed, Search, Settings and PDF page view. Wide windows get a sidebar like Apple Books on the Mac; narrow ones switch to the phone's layout and pill bar. The window has rounded corners and its own window buttons. It reads and writes the same `library.json` and backup `.zip` as Android, so a phone backup restores on the desktop and the other way round. Data lives in `~/.local/share/gbook`.
+`desktop/` is a native GTK 4 app in Rust with the same look and features as the phone: Library with reading stats, plans and collections, the EPUB reader with highlights, notes, reactions and the focus tracker, the Feed, Search, Settings and PDF page view. Wide windows get a sidebar; narrow ones switch to the phone's layout and pill bar. In the reader, a frosted pill at the bottom holds search, text size (and every text option), contents and reading options, and your profile picture at the top right fills a ring towards today's reading goal and opens this book's plan. The window has rounded corners and its own window buttons. It reads and writes the same `library.json` and backup `.zip` as Android, so a phone backup restores on the desktop and the other way round. Data lives in `~/.local/share/gbook`.
 
 <table>
   <tr>
     <td><img src="docs/screenshots/desktop/01-library.png" alt="Library with the sidebar"></td>
-    <td><img src="docs/screenshots/desktop/03-reader-options.png" alt="Reader with highlights and reading options"></td>
+    <td><img src="docs/screenshots/desktop/03-reader-badge.png" alt="Reader with today's reading and the book's plan"></td>
   </tr>
   <tr>
-    <td><img src="docs/screenshots/desktop/05-tracker.png" alt="Focus tracker on the Calm page theme"></td>
+    <td><img src="docs/screenshots/desktop/05-tracker.png" alt="Focus tracker on the Sepia page theme"></td>
     <td><img src="docs/screenshots/desktop/07-feed.png" alt="Feed"></td>
   </tr>
   <tr>
+    <td><img src="docs/screenshots/desktop/04-reader-text.png" alt="Text options from the reader's bottom pill"></td>
     <td><img src="docs/screenshots/desktop/02-library-dark.png" alt="Dark mode"></td>
-    <td><img src="docs/screenshots/desktop/08-book.png" alt="Book page"></td>
   </tr>
 </table>
 

@@ -1,5 +1,40 @@
 # GBook — To do
 
+## Google Drive sync (Android and desktop)
+
+Read on the phone, pick up in the same place on the PC. Everything stays in the user's own Drive, so GBook still
+has no server of its own.
+
+### Plan
+- [ ] **Storage:** reading state in the Drive *appDataFolder* (hidden, per-app; the `drive.appdata` scope needs no
+  security assessment, unlike full Drive access). Book files optionally in a visible "GBook" folder (`drive.file`)
+  so a book added on one device appears on the other
+- [ ] **What syncs:** reading position and progress, highlights and notes, reactions, posts (likes, saves),
+  reading plans, collections, settings, and reading time
+- [ ] **Format:** one shared sync document (or one per book) that both apps read and write; document it under
+  `shared/` so the Kotlin and Rust sides agree
+- [ ] **Merging:**
+  - position: the most recently read device wins
+  - highlights, notes, posts, collections: merge by id, with tombstones so a deletion spreads instead of the item
+    coming back from the other device
+  - reading time: kept per device and summed, so nothing is double counted
+  - settings: last change wins, field by field
+- [ ] **When:** pull on app start and on opening a book; push after closing a book, on leaving the app, and every
+  few minutes while reading; poll the Drive changes feed instead of re-downloading everything
+- [ ] **Android:** Google sign-in and Drive authorization (Identity `AuthorizationClient`), Drive REST v3 calls;
+  local data stays the source of truth and works offline
+- [ ] **Desktop:** OAuth loopback sign-in in the browser (PKCE), token in the system keyring, same REST calls
+- [ ] **Google Cloud:** one project with an OAuth consent screen, Android and desktop client IDs
+- [ ] **UI:** Settings › Google Drive: "Sync with Google Drive" switch, account, "Synced 2 min ago", Sync now
+- [ ] **Testing:** phone and PC editing the same book offline, then both coming online; deleting on one side;
+  two phones on one account
+
+## Android follow-ups
+- [ ] Scanned PDFs with no text layer (e.g. *Computer Lib*): show the rendered page images in reading mode
+- [ ] Soft fade at the ends of scrolling chapter names
+- [ ] Desktop parity for the new reader bar (search, Aa, contents, ···), the goal ring with the Today sheet, and
+  images in reflowed PDFs
+
 ## Desktop app (Rust): Linux and Windows
 
 The Linux app is in `desktop/`: a GTK 4 UI (`app/`) over a UI-free core (`core/`) that shares the Android library
@@ -42,7 +77,7 @@ format. See the README's "Desktop app" section.
 - [x] Same `library.json` schema as Android, unknown fields preserved on save
 - [x] Import/export the Android backup `.zip` (library.json + books/)
 - [x] Data in `~/.local/share/gbook` (`$GBOOK_DATA_DIR` overrides)
-- [ ] Later: optional Google Drive sync via the Drive API (needs an OAuth client)
+- [ ] Optional Google Drive sync via the Drive API: see "Google Drive sync" at the top
 
 ### Performance (measured with 100 books, release build)
 - [x] Cold start under 300 ms: ~250 ms to the first frame

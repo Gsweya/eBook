@@ -52,12 +52,13 @@ An open-source Android eReader for EPUB and PDF, built with Kotlin and Jetpack C
 - **Search** tab for books, authors, collections and highlights.
 - **First-run welcome**: a short splash, then set up your profile picture (with a circle cropper) and import your first books.
 - **Reading time**: today's minutes, a 7-day chart, streak and all-time totals, plus time spent in each book.
-- **Reader** with ten open-licence reading fonts (including Libre Baskerville), text size buttons and pinch-to-resize, page themes, line spacing, adjustable margins, contents and search, all in one **Reading options** sheet with a live preview of the page you're on.
+- **Reader** with a bar of quick buttons for search, text (**Aa**), contents and the rest of the reading options: ten open-licence reading fonts (including Libre Baskerville), text size buttons and pinch-to-resize, page themes, line spacing and adjustable margins, each sheet with a live preview of the page you're on. Long chapter names scroll instead of being cut off.
+- **Daily goal ring**: in the reader your profile picture is ringed with today's progress toward your reading goal; tap it for today's minutes, this sitting and the book's reading plan.
 - **Scroll or turn pages**: scroll through a whole chapter, or read one page at a time and tap or swipe to turn. Both show the page number, pages left in the chapter and a progress line.
 - **Reading tracker**: turn the wheel on the right edge to move a marker through the text word by word or sentence by sentence. Pick a highlight colour in its options and turning the wheel highlights what the marker passes. The wheel can sit in the middle or at the bottom of the screen.
 - **Highlights** across paragraphs with drag handles, a lens loupe, and a marker or underline style, grouped by book in the Library and searchable by book or wording.
 - **Feed** of posts built on-device from chapter key ideas, recap carousels and your highlights.
-- **PDF** page view with zoom, plus a reflowed text mode that reads like an EPUB: paragraphs, headings and named chapters are rebuilt from the page layout, and running headers and page numbers are dropped.
+- **PDF** page view with zoom, plus a reflowed text mode that reads like an EPUB: paragraphs, headings and named chapters are rebuilt from the page layout, figures and photos are placed where they appear in the text, and running headers and page numbers are dropped.
 - **Make it yours**: accent palettes, light/dark/system mode, pure black, two bottom-bar styles with a separate search button, symbol or Noto 3D emoji icons, and a profile picture.
 - **Google Drive** backup, restore and import through the system file picker.
 

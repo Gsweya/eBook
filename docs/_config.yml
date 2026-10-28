@@ -1,0 +1,6 @@
+# GitHub Pages site for GBook: the home page, privacy policy and terms linked from Google's sign-in screen.
+title: GBook
+description: Read, highlight and remember your books
+theme: jekyll-theme-minimal
+include: [index.md, privacy.md, terms.md]
+exclude: [spec.md, spec-notes, sync.md, windows.md, screenshots]

@@ -1,5 +1,12 @@
 package com.gbook.ui.screens
 
+import android.app.Activity
+import androidx.activity.result.IntentSenderRequest
+import androidx.compose.material.icons.automirrored.rounded.Logout
+import androidx.compose.material.icons.rounded.Sync
+import androidx.compose.runtime.rememberCoroutineScope
+import com.google.android.gms.common.api.ApiException
+import kotlinx.coroutines.launch
 import com.gbook.ui.components.plural
 import com.gbook.ui.components.bottomBarClearance
 import androidx.compose.foundation.Image
@@ -129,7 +136,7 @@ private val Pages = listOf(
     SettingsPage("navigation", "Navigation bar", "Bar style and icon style", Icons.Rounded.SpaceDashboard),
     SettingsPage("reading", "Reading", "Font, size, margins, page turning, tracker", Icons.AutoMirrored.Rounded.MenuBook),
     SettingsPage("goals", "Goals & reminders", "Daily goal and reading timetable", Icons.Rounded.NotificationsActive),
-    SettingsPage("backup", "Google Drive & backup", "Back up, restore, import books", Icons.Rounded.Cloud),
+    SettingsPage("backup", "Google Drive & backup", "Sync, back up, restore, import books", Icons.Rounded.Cloud),
     SettingsPage("about", "About", "Version and credits", Icons.Rounded.Info),
 )
 
@@ -174,6 +181,7 @@ private fun SettingsRoot(vm: AppViewModel, onPage: (String?) -> Unit, onScrollDi
     val g = LocalG.current
     val ctx = LocalContext.current
     val data by vm.data.collectAsState()
+    val sync by vm.drive.status.collectAsState()
     val s = data.settings
     val list = rememberLazyListState()
     val version = remember(ctx) { runCatching { ctx.packageManager.getPackageInfo(ctx.packageName, 0).versionName }.getOrNull() ?: "" }
@@ -215,7 +223,7 @@ private fun SettingsRoot(vm: AppViewModel, onPage: (String?) -> Unit, onScrollDi
         }
         item {
             SectionLabel("Library")
-            SettingsCard { Row("backup") }
+            SettingsCard { Row("backup", if (sync.state.enabled) "Sync on" else null) }
         }
         item {
             SectionLabel("About")
@@ -528,6 +536,8 @@ private fun BackupPage(vm: AppViewModel) {
     val backup = rememberLauncherForActivityResult(ActivityResultContracts.CreateDocument("application/zip")) { it?.let(vm::backup) }
     val restore = rememberLauncherForActivityResult(ActivityResultContracts.OpenDocument()) { it?.let(vm::restore) }
     val importMany = rememberLauncherForActivityResult(ActivityResultContracts.OpenMultipleDocuments()) { uris -> vm.importMany(uris) }
+    SyncSection(vm)
+    SectionLabel("Backup")
     Text(
         "When the file picker opens, choose Drive from the menu (☰) and pick a folder.",
         style = GType.secondary, color = g.text2, modifier = Modifier.padding(start = 20.dp, end = 20.dp, bottom = 8.dp),
@@ -544,6 +554,62 @@ private fun BackupPage(vm: AppViewModel) {
         HorizontalDivider(Modifier.padding(start = 62.dp), color = g.separator)
         SyncRow(Icons.Rounded.FileOpen, "Import books", "EPUB and PDF, several at once") {
             importMany.launch(arrayOf("application/epub+zip", "application/pdf"))
+        }
+    }
+}
+
+/** Google Drive sync: sign in, see when it last synced, sync now, sign out. */
+@Composable
+private fun SyncSection(vm: AppViewModel) {
+    val g = LocalG.current
+    val status by vm.drive.status.collectAsState()
+    val st = status.state
+    val scope = rememberCoroutineScope()
+    var signingIn by remember { mutableStateOf(false) }
+    val failed = { e: Throwable ->
+        signingIn = false
+        // Status 10 (DEVELOPER_ERROR): this build's package and signing key aren't registered in the Google Cloud project.
+        vm.toast(if ((e as? ApiException)?.statusCode == 10) "This build of GBook isn't registered with Google yet" else "Couldn't sign in: ${e.message ?: "unknown error"}")
+    }
+    val consent = rememberLauncherForActivityResult(ActivityResultContracts.StartIntentSenderForResult()) { r ->
+        if (r.resultCode != Activity.RESULT_OK) { signingIn = false; return@rememberLauncherForActivityResult }
+        scope.launch { runCatching { vm.drive.finishSignIn(r.data) }.onFailure(failed); signingIn = false }
+    }
+    SectionLabel("Sync")
+    Text(
+        "Keep your library the same on your phone and computer: reading places, highlights, notes, posts, collections, plans, settings and reading time. It's all kept in your own Google Drive, in a hidden folder only GBook can see.",
+        style = GType.secondary, color = g.text2, modifier = Modifier.padding(start = 20.dp, end = 20.dp, bottom = 8.dp),
+    )
+    SettingsCard {
+        if (!st.enabled) {
+            SyncRow(Icons.Rounded.Sync, if (signingIn) "Signing in…" else "Sync with Google Drive", st.error.ifBlank { "Sign in with your Google account" }) {
+                if (signingIn) return@SyncRow
+                signingIn = true
+                scope.launch {
+                    runCatching { vm.drive.beginSignIn() }
+                        .onSuccess { pi -> if (pi != null) consent.launch(IntentSenderRequest.Builder(pi.intentSender).build()) else signingIn = false }
+                        .onFailure(failed)
+                }
+            }
+        } else {
+            val line = when {
+                status.running -> status.progress.ifBlank { "Syncing…" }
+                st.error.isNotBlank() -> "Couldn't sync: ${st.error}"
+                st.lastSync > 0 -> "Synced " + DateUtils.getRelativeTimeSpanString(st.lastSync, System.currentTimeMillis(), DateUtils.MINUTE_IN_MILLIS)
+                else -> "Not synced yet"
+            }
+            SyncRow(Icons.Rounded.Sync, "Sync now", line) { vm.drive.syncNow() }
+            HorizontalDivider(Modifier.padding(start = 62.dp), color = g.separator)
+            Row(Modifier.fillMaxWidth().padding(start = 62.dp, end = 18.dp, top = 12.dp, bottom = 12.dp), verticalAlignment = Alignment.CenterVertically) {
+                Column(Modifier.weight(1f)) {
+                    Text("Sync book files", fontSize = 17.sp, color = g.text)
+                    Text("Books added on one device download on the others. They count toward your Drive storage.", fontSize = 15.sp, color = g.text2)
+                }
+                Spacer(Modifier.width(12.dp))
+                GSwitch(st.syncBooks) { vm.drive.setSyncBooks(it) }
+            }
+            HorizontalDivider(Modifier.padding(start = 62.dp), color = g.separator)
+            SyncRow(Icons.AutoMirrored.Rounded.Logout, "Sign out", "${st.account} · Your library stays on this phone") { vm.drive.signOut() }
         }
     }
 }

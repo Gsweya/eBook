@@ -12,3 +12,4 @@ quick-xml = "0.42"
 zip = { version = "9", default-features = false, features = ["deflate-flate2-zlib"] }
 sha1_smol = "1"
 dirs = "7"
+flate2 = { version = "1", default-features = false, features = ["zlib"] }

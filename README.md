@@ -60,6 +60,7 @@ An open-source Android eReader for EPUB and PDF, built with Kotlin and Jetpack C
 - **Feed** of posts built on-device from chapter key ideas, recap carousels and your highlights.
 - **PDF** page view with zoom, plus a reflowed text mode that reads like an EPUB: paragraphs, headings and named chapters are rebuilt from the page layout, figures and photos are placed where they appear in the text, and running headers and page numbers are dropped.
 - **Make it yours**: accent palettes, light/dark/system mode, pure black, two bottom-bar styles with a separate search button, symbol or Noto 3D emoji icons, and a profile picture.
+- **Sync with Google Drive** between your phone and computer: reading places, highlights, notes, posts, collections, plans, settings, reading time and (optionally) the books themselves, kept in your own Drive with no GBook server. See [docs/sync.md](docs/sync.md).
 - **Google Drive** backup, restore and import through the system file picker.
 
 ## Build
@@ -78,7 +79,7 @@ Debug builds also bundle any `.epub`/`.pdf` files you put in `sample_books/` (gi
 
 ## Desktop app (Linux and Windows)
 
-`desktop/` is a native GTK 4 app in Rust with the same look and features as the phone: Library with reading stats, plans and collections, the EPUB reader with highlights, notes, reactions and the focus tracker, the Feed, Search, Settings and PDF page view. Wide windows get a sidebar; narrow ones switch to the phone's layout and pill bar. In the reader, a frosted pill at the bottom holds search, text size (and every text option), contents and reading options, and your profile picture at the top right fills a ring towards today's reading goal and opens this book's plan. The window has rounded corners and its own window buttons. It reads and writes the same `library.json` and backup `.zip` as Android, so a phone backup restores on the desktop and the other way round. Data lives in `~/.local/share/gbook`.
+`desktop/` is a native GTK 4 app in Rust with the same look and features as the phone: Library with reading stats, plans and collections, the EPUB reader with highlights, notes, reactions and the focus tracker, the Feed, Search, Settings and PDF page view. Wide windows get a sidebar; narrow ones switch to the phone's layout and pill bar. In the reader, a frosted pill at the bottom holds search, text size (and every text option), contents and reading options, and your profile picture at the top right fills a ring towards today's reading goal and opens this book's plan. The window has rounded corners and its own window buttons. It reads and writes the same `library.json` and backup `.zip` as Android, so a phone backup restores on the desktop and the other way round, and it syncs with the phone through Google Drive. Data lives in `~/.local/share/gbook`.
 
 <table>
   <tr>
@@ -97,7 +98,7 @@ Debug builds also bundle any `.epub`/`.pdf` files you put in `sample_books/` (gi
 
 It's built to stay light: a 1.6 MB binary that uses the GTK, Pango and Poppler already on a GNOME desktop, about 250 ms to the first frame with 100 books, and 110–150 MB of memory while reading.
 
-Requires Rust, GTK 4.14+ and Poppler development files (`sudo dnf install gtk4-devel poppler-glib-devel` or `sudo apt install libgtk-4-dev libpoppler-glib-dev`).
+Requires Rust, GTK 4.14+, Poppler, OpenSSL and D-Bus development files (`sudo dnf install gtk4-devel poppler-glib-devel openssl-devel dbus-devel` or `sudo apt install libgtk-4-dev libpoppler-glib-dev libssl-dev libdbus-1-dev`). Google Drive sync also needs a Google OAuth client ID at build time; see [docs/sync.md](docs/sync.md).
 
 ```sh
 cd desktop
@@ -130,7 +131,8 @@ Add a palette to `AccentPalettes` and it appears in **Settings → Appearance** 
 ## Project layout
 
 - `gbook/` — the Android app (`com.gbook`)
-- `desktop/` — the Linux app: `core/` (library format, EPUB parser, feed posts, backups; no UI) and `app/` (GTK 4)
+- `desktop/` — the Linux app: `core/` (library format, EPUB parser, feed posts, backups, sync merge; no UI) and `app/` (GTK 4)
+- `shared/sync/` — the sync format both apps follow, with test cases both run
 - `docs/spec.md`, `docs/spec-notes/` — design notes
 - `bookgram-monorepo-structure.md` — original idea document
 

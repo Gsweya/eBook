@@ -181,6 +181,7 @@ impl Shell {
                 glib::timeout_add_local_once(Duration::from_millis(200), crate::release_memory);
             });
             self.app.flush();
+            crate::sync::soon(&self.app);
             if let Some(w) = self.app.window() {
                 gtk::prelude::GtkWindowExt::set_focus(&w, None::<&gtk::Widget>);
             }
@@ -276,9 +277,21 @@ pub fn build(gapp: &gtk::Application, app: &AppRc) {
     shortcuts(&shell, &window);
 
     let a = app.clone();
-    window.connect_close_request(move |_| {
+    window.connect_close_request(move |w| {
         a.flush();
+        // A last sync, with the window already gone from the screen.
+        let win = w.clone();
+        if crate::sync::finish_then(&a, move || win.destroy()) {
+            w.set_visible(false);
+            return glib::Propagation::Stop;
+        }
         glib::Propagation::Proceed
+    });
+    let a = app.clone();
+    window.connect_is_active_notify(move |w| {
+        if w.is_active() {
+            crate::sync::on_focus(&a);
+        }
     });
     shell.select(Tab::Library);
     window.present();

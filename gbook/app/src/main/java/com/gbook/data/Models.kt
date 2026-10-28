@@ -42,6 +42,8 @@ data class Book(
     val pagesRead: Int = 0,
     /** The reader's own rating, 1 to 5 stars; 0 means not rated. */
     val rating: Int = 0,
+    /** When the reading position last changed; sync lets the device that read most recently win. */
+    val positionAt: Long = 0,
 )
 
 @Serializable

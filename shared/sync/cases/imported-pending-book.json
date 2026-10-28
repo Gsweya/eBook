@@ -1,0 +1,1319 @@
+{
+  "base": {
+    "bookDays": {
+      "2026-10-01": {
+        "b1": 60000
+      }
+    },
+    "books": [
+      {
+        "addedAt": 100,
+        "author": "X",
+        "backedUpAt": 0,
+        "chapterCount": 3,
+        "coverColor": 1,
+        "fileName": "book.epub",
+        "format": "EPUB",
+        "hasCover": true,
+        "id": "b1",
+        "lastOpenedAt": 500,
+        "myReaction": null,
+        "pageCount": 0,
+        "pagesRead": 0,
+        "position": {
+          "chapter": 0,
+          "item": 0,
+          "offset": 0,
+          "pdfPage": 0
+        },
+        "positionAt": 500,
+        "progress": 0.3,
+        "rating": 3,
+        "reactions": {},
+        "readingMs": 60000,
+        "textReady": true,
+        "textVersion": 0,
+        "title": "Book b1"
+      }
+    ],
+    "collections": [],
+    "highlights": [
+      {
+        "block": 1,
+        "bookId": "b1",
+        "chapter": 0,
+        "color": 0,
+        "createdAt": 200,
+        "end": 5,
+        "id": "h1",
+        "note": null,
+        "start": 0,
+        "text": "quote h1"
+      },
+      {
+        "block": 1,
+        "bookId": "b1",
+        "chapter": 0,
+        "color": 0,
+        "createdAt": 200,
+        "end": 5,
+        "id": "h2",
+        "note": null,
+        "start": 0,
+        "text": "quote h2"
+      }
+    ],
+    "onboarded": true,
+    "pagesLog": {},
+    "plans": [],
+    "posts": [],
+    "readingLog": {
+      "2026-10-01": 60000
+    },
+    "reminders": [],
+    "seeded": true,
+    "settings": {
+      "accent": "amber",
+      "avatarVersion": 0,
+      "dailyGoalMin": 0,
+      "fontSize": 19.0,
+      "margin": 24
+    }
+  },
+  "description": "After the pending book is imported here, the account's fields win over the fresh import's, its highlight appears, and its per-device fields stay as imported.",
+  "device": "aaaa1111",
+  "doc": {
+    "books": {
+      "b1": {
+        "f": {
+          "addedAt": [
+            500,
+            "aaaa1111",
+            100
+          ],
+          "author": [
+            500,
+            "aaaa1111",
+            "X"
+          ],
+          "fileName": [
+            500,
+            "aaaa1111",
+            "book.epub"
+          ],
+          "format": [
+            500,
+            "aaaa1111",
+            "EPUB"
+          ],
+          "id": [
+            500,
+            "aaaa1111",
+            "b1"
+          ],
+          "lastOpenedAt": [
+            500,
+            "aaaa1111",
+            500
+          ],
+          "myReaction": [
+            500,
+            "aaaa1111",
+            null
+          ],
+          "position": [
+            500,
+            "aaaa1111",
+            {
+              "chapter": 0,
+              "item": 0,
+              "offset": 0,
+              "pdfPage": 0
+            }
+          ],
+          "positionAt": [
+            500,
+            "aaaa1111",
+            500
+          ],
+          "progress": [
+            500,
+            "aaaa1111",
+            0.3
+          ],
+          "rating": [
+            500,
+            "aaaa1111",
+            3
+          ],
+          "reactions": [
+            500,
+            "aaaa1111",
+            {}
+          ],
+          "title": [
+            500,
+            "aaaa1111",
+            "Book b1"
+          ]
+        }
+      }
+    },
+    "collections": {},
+    "counters": {
+      "aaaa1111": {
+        "bookDays": {
+          "2026-10-01": {
+            "b1": 60000
+          }
+        },
+        "readingLog": {
+          "2026-10-01": 60000
+        },
+        "readingMs": {
+          "b1": 60000
+        }
+      }
+    },
+    "format": 1,
+    "highlights": {
+      "h1": {
+        "f": {
+          "block": [
+            500,
+            "aaaa1111",
+            1
+          ],
+          "bookId": [
+            500,
+            "aaaa1111",
+            "b1"
+          ],
+          "chapter": [
+            500,
+            "aaaa1111",
+            0
+          ],
+          "color": [
+            500,
+            "aaaa1111",
+            0
+          ],
+          "createdAt": [
+            500,
+            "aaaa1111",
+            200
+          ],
+          "end": [
+            500,
+            "aaaa1111",
+            5
+          ],
+          "id": [
+            500,
+            "aaaa1111",
+            "h1"
+          ],
+          "note": [
+            500,
+            "aaaa1111",
+            null
+          ],
+          "start": [
+            500,
+            "aaaa1111",
+            0
+          ],
+          "text": [
+            500,
+            "aaaa1111",
+            "quote h1"
+          ]
+        }
+      },
+      "h2": {
+        "f": {
+          "block": [
+            500,
+            "aaaa1111",
+            1
+          ],
+          "bookId": [
+            500,
+            "aaaa1111",
+            "b1"
+          ],
+          "chapter": [
+            500,
+            "aaaa1111",
+            0
+          ],
+          "color": [
+            500,
+            "aaaa1111",
+            0
+          ],
+          "createdAt": [
+            500,
+            "aaaa1111",
+            200
+          ],
+          "end": [
+            500,
+            "aaaa1111",
+            5
+          ],
+          "id": [
+            500,
+            "aaaa1111",
+            "h2"
+          ],
+          "note": [
+            500,
+            "aaaa1111",
+            null
+          ],
+          "start": [
+            500,
+            "aaaa1111",
+            0
+          ],
+          "text": [
+            500,
+            "aaaa1111",
+            "quote h2"
+          ]
+        }
+      }
+    },
+    "plans": {},
+    "posts": {},
+    "reminders": {},
+    "settings": {
+      "f": {
+        "accent": [
+          500,
+          "aaaa1111",
+          "amber"
+        ],
+        "dailyGoalMin": [
+          500,
+          "aaaa1111",
+          0
+        ]
+      }
+    }
+  },
+  "expect": {
+    "doc": {
+      "books": {
+        "b1": {
+          "f": {
+            "addedAt": [
+              500,
+              "aaaa1111",
+              100
+            ],
+            "author": [
+              500,
+              "aaaa1111",
+              "X"
+            ],
+            "fileName": [
+              500,
+              "aaaa1111",
+              "book.epub"
+            ],
+            "format": [
+              500,
+              "aaaa1111",
+              "EPUB"
+            ],
+            "id": [
+              500,
+              "aaaa1111",
+              "b1"
+            ],
+            "lastOpenedAt": [
+              500,
+              "aaaa1111",
+              500
+            ],
+            "myReaction": [
+              500,
+              "aaaa1111",
+              null
+            ],
+            "position": [
+              500,
+              "aaaa1111",
+              {
+                "chapter": 0,
+                "item": 0,
+                "offset": 0,
+                "pdfPage": 0
+              }
+            ],
+            "positionAt": [
+              500,
+              "aaaa1111",
+              500
+            ],
+            "progress": [
+              500,
+              "aaaa1111",
+              0.3
+            ],
+            "rating": [
+              500,
+              "aaaa1111",
+              3
+            ],
+            "reactions": [
+              500,
+              "aaaa1111",
+              {}
+            ],
+            "title": [
+              500,
+              "aaaa1111",
+              "Book b1"
+            ]
+          }
+        },
+        "b9": {
+          "f": {
+            "addedAt": [
+              600,
+              "bbbb2222",
+              600
+            ],
+            "author": [
+              600,
+              "bbbb2222",
+              "X"
+            ],
+            "fileName": [
+              600,
+              "bbbb2222",
+              "book.pdf"
+            ],
+            "format": [
+              600,
+              "bbbb2222",
+              "PDF"
+            ],
+            "id": [
+              600,
+              "bbbb2222",
+              "b9"
+            ],
+            "lastOpenedAt": [
+              600,
+              "bbbb2222",
+              0
+            ],
+            "myReaction": [
+              600,
+              "bbbb2222",
+              null
+            ],
+            "position": [
+              600,
+              "bbbb2222",
+              {
+                "chapter": 0,
+                "item": 0,
+                "offset": 0,
+                "pdfPage": 0
+              }
+            ],
+            "positionAt": [
+              600,
+              "bbbb2222",
+              0
+            ],
+            "progress": [
+              600,
+              "bbbb2222",
+              0.0
+            ],
+            "rating": [
+              600,
+              "bbbb2222",
+              0
+            ],
+            "reactions": [
+              600,
+              "bbbb2222",
+              {}
+            ],
+            "title": [
+              600,
+              "bbbb2222",
+              "Phone book"
+            ]
+          }
+        }
+      },
+      "collections": {
+        "c1": {
+          "f": {
+            "bookIds": [
+              600,
+              "bbbb2222",
+              [
+                "b1",
+                "b9"
+              ]
+            ],
+            "createdAt": [
+              600,
+              "bbbb2222",
+              600
+            ],
+            "id": [
+              600,
+              "bbbb2222",
+              "c1"
+            ],
+            "name": [
+              600,
+              "bbbb2222",
+              "Shelf"
+            ]
+          }
+        }
+      },
+      "counters": {
+        "aaaa1111": {
+          "bookDays": {
+            "2026-10-01": {
+              "b1": 60000
+            }
+          },
+          "readingLog": {
+            "2026-10-01": 60000
+          },
+          "readingMs": {
+            "b1": 60000
+          }
+        },
+        "bbbb2222": {
+          "readingMs": {
+            "b9": 5000
+          }
+        }
+      },
+      "format": 1,
+      "highlights": {
+        "h1": {
+          "f": {
+            "block": [
+              500,
+              "aaaa1111",
+              1
+            ],
+            "bookId": [
+              500,
+              "aaaa1111",
+              "b1"
+            ],
+            "chapter": [
+              500,
+              "aaaa1111",
+              0
+            ],
+            "color": [
+              500,
+              "aaaa1111",
+              0
+            ],
+            "createdAt": [
+              500,
+              "aaaa1111",
+              200
+            ],
+            "end": [
+              500,
+              "aaaa1111",
+              5
+            ],
+            "id": [
+              500,
+              "aaaa1111",
+              "h1"
+            ],
+            "note": [
+              500,
+              "aaaa1111",
+              null
+            ],
+            "start": [
+              500,
+              "aaaa1111",
+              0
+            ],
+            "text": [
+              500,
+              "aaaa1111",
+              "quote h1"
+            ]
+          }
+        },
+        "h2": {
+          "f": {
+            "block": [
+              500,
+              "aaaa1111",
+              1
+            ],
+            "bookId": [
+              500,
+              "aaaa1111",
+              "b1"
+            ],
+            "chapter": [
+              500,
+              "aaaa1111",
+              0
+            ],
+            "color": [
+              500,
+              "aaaa1111",
+              0
+            ],
+            "createdAt": [
+              500,
+              "aaaa1111",
+              200
+            ],
+            "end": [
+              500,
+              "aaaa1111",
+              5
+            ],
+            "id": [
+              500,
+              "aaaa1111",
+              "h2"
+            ],
+            "note": [
+              500,
+              "aaaa1111",
+              null
+            ],
+            "start": [
+              500,
+              "aaaa1111",
+              0
+            ],
+            "text": [
+              500,
+              "aaaa1111",
+              "quote h2"
+            ]
+          }
+        },
+        "h9": {
+          "f": {
+            "block": [
+              600,
+              "bbbb2222",
+              1
+            ],
+            "bookId": [
+              600,
+              "bbbb2222",
+              "b9"
+            ],
+            "chapter": [
+              600,
+              "bbbb2222",
+              0
+            ],
+            "color": [
+              600,
+              "bbbb2222",
+              0
+            ],
+            "createdAt": [
+              600,
+              "bbbb2222",
+              600
+            ],
+            "end": [
+              600,
+              "bbbb2222",
+              5
+            ],
+            "id": [
+              600,
+              "bbbb2222",
+              "h9"
+            ],
+            "note": [
+              600,
+              "bbbb2222",
+              null
+            ],
+            "start": [
+              600,
+              "bbbb2222",
+              0
+            ],
+            "text": [
+              600,
+              "bbbb2222",
+              "quote h9"
+            ]
+          }
+        }
+      },
+      "plans": {},
+      "posts": {},
+      "reminders": {},
+      "settings": {
+        "f": {
+          "accent": [
+            500,
+            "aaaa1111",
+            "amber"
+          ],
+          "dailyGoalMin": [
+            500,
+            "aaaa1111",
+            0
+          ]
+        }
+      }
+    },
+    "library": {
+      "bookDays": {
+        "2026-10-01": {
+          "b1": 60000
+        }
+      },
+      "books": [
+        {
+          "addedAt": 100,
+          "author": "X",
+          "backedUpAt": 0,
+          "chapterCount": 3,
+          "coverColor": 1,
+          "fileName": "book.epub",
+          "format": "EPUB",
+          "hasCover": true,
+          "id": "b1",
+          "lastOpenedAt": 500,
+          "myReaction": null,
+          "pageCount": 0,
+          "pagesRead": 0,
+          "position": {
+            "chapter": 0,
+            "item": 0,
+            "offset": 0,
+            "pdfPage": 0
+          },
+          "positionAt": 500,
+          "progress": 0.3,
+          "rating": 3,
+          "reactions": {},
+          "readingMs": 60000,
+          "textReady": true,
+          "textVersion": 0,
+          "title": "Book b1"
+        },
+        {
+          "addedAt": 600,
+          "author": "X",
+          "backedUpAt": 0,
+          "chapterCount": 3,
+          "coverColor": 1,
+          "fileName": "book.pdf",
+          "format": "PDF",
+          "hasCover": true,
+          "id": "b9",
+          "lastOpenedAt": 0,
+          "myReaction": null,
+          "pageCount": 40,
+          "pagesRead": 0,
+          "position": {
+            "chapter": 0,
+            "item": 0,
+            "offset": 0,
+            "pdfPage": 0
+          },
+          "positionAt": 0,
+          "progress": 0.0,
+          "rating": 0,
+          "reactions": {},
+          "readingMs": 5000,
+          "textReady": false,
+          "textVersion": 0,
+          "title": "Phone book"
+        }
+      ],
+      "collections": [
+        {
+          "bookIds": [
+            "b1",
+            "b9"
+          ],
+          "createdAt": 600,
+          "id": "c1",
+          "name": "Shelf"
+        }
+      ],
+      "highlights": [
+        {
+          "block": 1,
+          "bookId": "b1",
+          "chapter": 0,
+          "color": 0,
+          "createdAt": 200,
+          "end": 5,
+          "id": "h1",
+          "note": null,
+          "start": 0,
+          "text": "quote h1"
+        },
+        {
+          "block": 1,
+          "bookId": "b1",
+          "chapter": 0,
+          "color": 0,
+          "createdAt": 200,
+          "end": 5,
+          "id": "h2",
+          "note": null,
+          "start": 0,
+          "text": "quote h2"
+        },
+        {
+          "block": 1,
+          "bookId": "b9",
+          "chapter": 0,
+          "color": 0,
+          "createdAt": 600,
+          "end": 5,
+          "id": "h9",
+          "note": null,
+          "start": 0,
+          "text": "quote h9"
+        }
+      ],
+      "onboarded": true,
+      "pagesLog": {},
+      "plans": [],
+      "posts": [],
+      "readingLog": {
+        "2026-10-01": 60000
+      },
+      "reminders": [],
+      "seeded": true,
+      "settings": {
+        "accent": "amber",
+        "avatarVersion": 0,
+        "dailyGoalMin": 0,
+        "fontSize": 19.0,
+        "margin": 24
+      }
+    }
+  },
+  "expect_pending": [],
+  "local": {
+    "bookDays": {
+      "2026-10-01": {
+        "b1": 60000
+      }
+    },
+    "books": [
+      {
+        "addedAt": 100,
+        "author": "X",
+        "backedUpAt": 0,
+        "chapterCount": 3,
+        "coverColor": 1,
+        "fileName": "book.epub",
+        "format": "EPUB",
+        "hasCover": true,
+        "id": "b1",
+        "lastOpenedAt": 500,
+        "myReaction": null,
+        "pageCount": 0,
+        "pagesRead": 0,
+        "position": {
+          "chapter": 0,
+          "item": 0,
+          "offset": 0,
+          "pdfPage": 0
+        },
+        "positionAt": 500,
+        "progress": 0.3,
+        "rating": 3,
+        "reactions": {},
+        "readingMs": 60000,
+        "textReady": true,
+        "textVersion": 0,
+        "title": "Book b1"
+      },
+      {
+        "addedAt": 990,
+        "author": "X",
+        "backedUpAt": 0,
+        "chapterCount": 3,
+        "coverColor": 1,
+        "fileName": "book.pdf",
+        "format": "PDF",
+        "hasCover": true,
+        "id": "b9",
+        "lastOpenedAt": 0,
+        "myReaction": null,
+        "pageCount": 40,
+        "pagesRead": 0,
+        "position": {
+          "chapter": 0,
+          "item": 0,
+          "offset": 0,
+          "pdfPage": 0
+        },
+        "positionAt": 0,
+        "progress": 0.0,
+        "rating": 0,
+        "reactions": {},
+        "readingMs": 0,
+        "textReady": false,
+        "textVersion": 0,
+        "title": "Parsed title"
+      }
+    ],
+    "collections": [],
+    "highlights": [
+      {
+        "block": 1,
+        "bookId": "b1",
+        "chapter": 0,
+        "color": 0,
+        "createdAt": 200,
+        "end": 5,
+        "id": "h1",
+        "note": null,
+        "start": 0,
+        "text": "quote h1"
+      },
+      {
+        "block": 1,
+        "bookId": "b1",
+        "chapter": 0,
+        "color": 0,
+        "createdAt": 200,
+        "end": 5,
+        "id": "h2",
+        "note": null,
+        "start": 0,
+        "text": "quote h2"
+      }
+    ],
+    "onboarded": true,
+    "pagesLog": {},
+    "plans": [],
+    "posts": [],
+    "readingLog": {
+      "2026-10-01": 60000
+    },
+    "reminders": [],
+    "seeded": true,
+    "settings": {
+      "accent": "amber",
+      "avatarVersion": 0,
+      "dailyGoalMin": 0,
+      "fontSize": 19.0,
+      "margin": 24
+    }
+  },
+  "now": 1000,
+  "remote": {
+    "books": {
+      "b1": {
+        "f": {
+          "addedAt": [
+            500,
+            "aaaa1111",
+            100
+          ],
+          "author": [
+            500,
+            "aaaa1111",
+            "X"
+          ],
+          "fileName": [
+            500,
+            "aaaa1111",
+            "book.epub"
+          ],
+          "format": [
+            500,
+            "aaaa1111",
+            "EPUB"
+          ],
+          "id": [
+            500,
+            "aaaa1111",
+            "b1"
+          ],
+          "lastOpenedAt": [
+            500,
+            "aaaa1111",
+            500
+          ],
+          "myReaction": [
+            500,
+            "aaaa1111",
+            null
+          ],
+          "position": [
+            500,
+            "aaaa1111",
+            {
+              "chapter": 0,
+              "item": 0,
+              "offset": 0,
+              "pdfPage": 0
+            }
+          ],
+          "positionAt": [
+            500,
+            "aaaa1111",
+            500
+          ],
+          "progress": [
+            500,
+            "aaaa1111",
+            0.3
+          ],
+          "rating": [
+            500,
+            "aaaa1111",
+            3
+          ],
+          "reactions": [
+            500,
+            "aaaa1111",
+            {}
+          ],
+          "title": [
+            500,
+            "aaaa1111",
+            "Book b1"
+          ]
+        }
+      },
+      "b9": {
+        "f": {
+          "addedAt": [
+            600,
+            "bbbb2222",
+            600
+          ],
+          "author": [
+            600,
+            "bbbb2222",
+            "X"
+          ],
+          "fileName": [
+            600,
+            "bbbb2222",
+            "book.pdf"
+          ],
+          "format": [
+            600,
+            "bbbb2222",
+            "PDF"
+          ],
+          "id": [
+            600,
+            "bbbb2222",
+            "b9"
+          ],
+          "lastOpenedAt": [
+            600,
+            "bbbb2222",
+            0
+          ],
+          "myReaction": [
+            600,
+            "bbbb2222",
+            null
+          ],
+          "position": [
+            600,
+            "bbbb2222",
+            {
+              "chapter": 0,
+              "item": 0,
+              "offset": 0,
+              "pdfPage": 0
+            }
+          ],
+          "positionAt": [
+            600,
+            "bbbb2222",
+            0
+          ],
+          "progress": [
+            600,
+            "bbbb2222",
+            0.0
+          ],
+          "rating": [
+            600,
+            "bbbb2222",
+            0
+          ],
+          "reactions": [
+            600,
+            "bbbb2222",
+            {}
+          ],
+          "title": [
+            600,
+            "bbbb2222",
+            "Phone book"
+          ]
+        }
+      }
+    },
+    "collections": {
+      "c1": {
+        "f": {
+          "bookIds": [
+            600,
+            "bbbb2222",
+            [
+              "b1",
+              "b9"
+            ]
+          ],
+          "createdAt": [
+            600,
+            "bbbb2222",
+            600
+          ],
+          "id": [
+            600,
+            "bbbb2222",
+            "c1"
+          ],
+          "name": [
+            600,
+            "bbbb2222",
+            "Shelf"
+          ]
+        }
+      }
+    },
+    "counters": {
+      "aaaa1111": {
+        "bookDays": {
+          "2026-10-01": {
+            "b1": 60000
+          }
+        },
+        "readingLog": {
+          "2026-10-01": 60000
+        },
+        "readingMs": {
+          "b1": 60000
+        }
+      },
+      "bbbb2222": {
+        "readingMs": {
+          "b9": 5000
+        }
+      }
+    },
+    "format": 1,
+    "highlights": {
+      "h1": {
+        "f": {
+          "block": [
+            500,
+            "aaaa1111",
+            1
+          ],
+          "bookId": [
+            500,
+            "aaaa1111",
+            "b1"
+          ],
+          "chapter": [
+            500,
+            "aaaa1111",
+            0
+          ],
+          "color": [
+            500,
+            "aaaa1111",
+            0
+          ],
+          "createdAt": [
+            500,
+            "aaaa1111",
+            200
+          ],
+          "end": [
+            500,
+            "aaaa1111",
+            5
+          ],
+          "id": [
+            500,
+            "aaaa1111",
+            "h1"
+          ],
+          "note": [
+            500,
+            "aaaa1111",
+            null
+          ],
+          "start": [
+            500,
+            "aaaa1111",
+            0
+          ],
+          "text": [
+            500,
+            "aaaa1111",
+            "quote h1"
+          ]
+        }
+      },
+      "h2": {
+        "f": {
+          "block": [
+            500,
+            "aaaa1111",
+            1
+          ],
+          "bookId": [
+            500,
+            "aaaa1111",
+            "b1"
+          ],
+          "chapter": [
+            500,
+            "aaaa1111",
+            0
+          ],
+          "color": [
+            500,
+            "aaaa1111",
+            0
+          ],
+          "createdAt": [
+            500,
+            "aaaa1111",
+            200
+          ],
+          "end": [
+            500,
+            "aaaa1111",
+            5
+          ],
+          "id": [
+            500,
+            "aaaa1111",
+            "h2"
+          ],
+          "note": [
+            500,
+            "aaaa1111",
+            null
+          ],
+          "start": [
+            500,
+            "aaaa1111",
+            0
+          ],
+          "text": [
+            500,
+            "aaaa1111",
+            "quote h2"
+          ]
+        }
+      },
+      "h9": {
+        "f": {
+          "block": [
+            600,
+            "bbbb2222",
+            1
+          ],
+          "bookId": [
+            600,
+            "bbbb2222",
+            "b9"
+          ],
+          "chapter": [
+            600,
+            "bbbb2222",
+            0
+          ],
+          "color": [
+            600,
+            "bbbb2222",
+            0
+          ],
+          "createdAt": [
+            600,
+            "bbbb2222",
+            600
+          ],
+          "end": [
+            600,
+            "bbbb2222",
+            5
+          ],
+          "id": [
+            600,
+            "bbbb2222",
+            "h9"
+          ],
+          "note": [
+            600,
+            "bbbb2222",
+            null
+          ],
+          "start": [
+            600,
+            "bbbb2222",
+            0
+          ],
+          "text": [
+            600,
+            "bbbb2222",
+            "quote h9"
+          ]
+        }
+      }
+    },
+    "plans": {},
+    "posts": {},
+    "reminders": {},
+    "settings": {
+      "f": {
+        "accent": [
+          500,
+          "aaaa1111",
+          "amber"
+        ],
+        "dailyGoalMin": [
+          500,
+          "aaaa1111",
+          0
+        ]
+      }
+    }
+  }
+}

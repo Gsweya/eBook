@@ -89,6 +89,16 @@ class MainActivity : ComponentActivity() {
         }
     }
 
+    override fun onStart() {
+        super.onStart()
+        vm.drive.onForeground()
+    }
+
+    override fun onStop() {
+        super.onStop()
+        vm.drive.onBackground()
+    }
+
     override fun onNewIntent(intent: Intent) {
         super.onNewIntent(intent)
         handleIntent(intent)
@@ -126,6 +136,14 @@ fun App(vm: AppViewModel, pendingOpen: MutableStateFlow<Uri?>, pendingBook: Muta
         }
     }
     BackHandler(stack.size > 1) { nav.pop() }
+    // Closing a book is a good moment to sync where it was left.
+    val top = stack.last()
+    var wasReading by remember { mutableStateOf(false) }
+    LaunchedEffect(top) {
+        val reading = top is Route.Reader || top is Route.Pdf
+        if (wasReading && !reading) vm.drive.soon()
+        wasReading = reading
+    }
     // From inside a book: swap it for another rather than stacking readers.
     val switchBook: (Book) -> Unit = { b -> vm.markOpened(b.id); nav.pop(); nav.open(b) }
 

@@ -11,13 +11,19 @@ on:
 permissions:
   contents: write
 
+# The Google OAuth client sync signs in with, from the repository's secrets (see docs/sync.md). Builds without
+# them work, with sync unavailable.
+env:
+  GBOOK_GOOGLE_CLIENT_ID: ${{ secrets.GBOOK_GOOGLE_CLIENT_ID }}
+  GBOOK_GOOGLE_CLIENT_SECRET: ${{ secrets.GBOOK_GOOGLE_CLIENT_SECRET }}
+
 jobs:
   linux:
     runs-on: ubuntu-24.04
     steps:
       - uses: actions/checkout@v4
-      - name: Install GTK, Poppler and rpmbuild
-        run: sudo apt-get update && sudo apt-get install -y libgtk-4-dev libpoppler-glib-dev rpm
+      - name: Install GTK, Poppler, OpenSSL, D-Bus and rpmbuild
+        run: sudo apt-get update && sudo apt-get install -y libgtk-4-dev libpoppler-glib-dev libssl-dev libdbus-1-dev rpm
       - name: Build .deb and .rpm
         run: desktop/packaging/build-packages.sh
       - uses: actions/upload-artifact@v4

@@ -7,6 +7,7 @@
 //! books/<id>/cover
 //! books/<id>/content.json
 //! books/<id>/images/…
+//! sync/…                (Google Drive sync state, desktop and phone alike)
 //! ```
 
 use std::fs;
@@ -58,6 +59,10 @@ impl Paths {
     }
     pub fn cache_dir(&self) -> PathBuf {
         self.root.join("cache")
+    }
+    /// Sync state: this device's id, its copy of the sync document and the library as last synced.
+    pub fn sync_dir(&self) -> PathBuf {
+        self.root.join("sync")
     }
 }
 

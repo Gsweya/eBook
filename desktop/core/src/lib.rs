@@ -10,6 +10,7 @@ pub mod model;
 pub mod plans;
 pub mod posts;
 pub mod store;
+pub mod sync;
 pub mod tracker;
 
 pub use model::*;

@@ -64,6 +64,8 @@ pub struct Book {
     pub pages_read: i32,
     /// 1 to 5 stars; 0 means not rated.
     pub rating: i32,
+    /// When the reading position last changed; sync lets the device that read most recently win.
+    pub position_at: i64,
     #[serde(flatten)]
     pub extra: Extra,
 }
@@ -92,6 +94,7 @@ impl Default for Book {
             reading_ms: 0,
             pages_read: 0,
             rating: 0,
+            position_at: 0,
             extra: Extra::new(),
         }
     }

@@ -8,6 +8,7 @@ import com.gbook.data.Backup
 import com.gbook.data.Book
 import com.gbook.data.BookCollection
 import com.gbook.data.BookFormat
+import com.gbook.data.DriveSync
 import com.gbook.data.Highlight
 import com.gbook.data.Importer
 import com.gbook.data.PdfSupport
@@ -32,6 +33,8 @@ class AppViewModel(app: Application) : AndroidViewModel(app) {
     val store = Store(app)
     val importer = Importer(app, store, viewModelScope)
     val data: StateFlow<LibraryData> = store.data
+    /** Google Drive sync between this phone and GBook on other devices. */
+    val drive = DriveSync(app, store, importer, onApplied = { syncReminders() })
 
     /** Transient toast message shown by the app shell. */
     val toast = MutableStateFlow<String?>(null)
@@ -188,8 +191,10 @@ class AppViewModel(app: Application) : AndroidViewModel(app) {
 
     fun markOpened(id: String) = store.updateBook(id) { it.copy(lastOpenedAt = System.currentTimeMillis()) }
 
-    fun savePosition(id: String, pos: ReadingPosition, progress: Float) =
-        store.updateBook(id) { it.copy(position = pos, progress = progress.coerceIn(0f, 1f)) }
+    fun savePosition(id: String, pos: ReadingPosition, progress: Float) = store.updateBook(id) {
+        val p = progress.coerceIn(0f, 1f)
+        if (it.position == pos && it.progress == p) it else it.copy(position = pos, progress = p, positionAt = System.currentTimeMillis())
+    }
 
     fun updateSettings(f: (ReaderSettings) -> ReaderSettings) = store.update { it.copy(settings = f(it.settings)) }
 

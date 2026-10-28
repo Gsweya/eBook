@@ -82,7 +82,12 @@ pub fn import_paths(app: &AppRc, paths: Vec<PathBuf>, open_after: bool) {
                 Ok(Ok(Imported::New(b))) => {
                     last = Some(b.id.clone());
                     added += 1;
-                    app.update(|d| d.books.push(b));
+                    // Another import of the same file (or a sync) may have finished first.
+                    app.update(|d| {
+                        if d.book(&b.id).is_none() {
+                            d.books.push(b);
+                        }
+                    });
                 }
                 Ok(Err(e)) => {
                     failed += 1;
@@ -163,7 +168,9 @@ pub fn add_starter(app: &AppRc) {
         })
         .await;
         app.update(|d| {
-            if let Ok(Ok(Imported::New(mut b))) = res {
+            if let Ok(Ok(Imported::New(mut b))) = res
+                && d.book(&b.id).is_none()
+            {
                 // The PDF has no title and a short author name in its metadata.
                 b.title = "Fractured Minds".into();
                 b.author = "Galanda J. Sweya".into();

@@ -15,8 +15,8 @@ android {
         applicationId = "com.gbook"
         minSdk = 26
         targetSdk = 36
-        versionCode = 8
-        versionName = "1.4.0"
+        versionCode = 9
+        versionName = "1.5.0"
     }
     // Release signing reads a local, git-ignored keystore.properties (storeFile, storePassword, keyAlias, keyPassword).
     val keystoreProps = rootProject.file("keystore.properties").takeIf { it.exists() }?.let { f ->
@@ -67,4 +67,6 @@ dependencies {
     implementation("org.jsoup:jsoup:1.21.2")
     implementation("com.tom-roush:pdfbox-android:2.0.27.0")
     implementation("androidx.datastore:datastore-preferences:1.1.7")
+    implementation("com.google.android.gms:play-services-auth:21.4.0")
+    testImplementation("junit:junit:4.13.2")
 }

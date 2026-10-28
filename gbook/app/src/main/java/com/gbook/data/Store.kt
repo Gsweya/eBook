@@ -41,6 +41,19 @@ class Store(private val ctx: Context) {
         scope.launch { save() }
     }
 
+    /** Replaces the data with [new] only if it is still [expected]; returns whether it did. */
+    fun replaceIf(expected: LibraryData, new: LibraryData): Boolean {
+        if (!_data.compareAndSet(expected, new)) return false
+        scope.launch { save() }
+        return true
+    }
+
+    /** Removes a book's files, once the book itself is gone from the data. */
+    fun deleteFiles(id: String) {
+        contentCache.remove(id)
+        File(booksDir, id).deleteRecursively()
+    }
+
     private suspend fun save() = saveLock.withLock {
         val tmp = File(file.parentFile, "library.json.tmp")
         tmp.writeText(GJson.encodeToString(LibraryData.serializer(), _data.value))

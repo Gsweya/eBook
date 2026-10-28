@@ -3,31 +3,39 @@
 ## Google Drive sync (Android and desktop)
 
 Read on the phone, pick up in the same place on the PC. Everything stays in the user's own Drive, so GBook still
-has no server of its own.
+has no server of its own. Built: see `docs/sync.md` and the format in `shared/sync/README.md`.
 
-### Plan
-- [ ] **Storage:** reading state in the Drive *appDataFolder* (hidden, per-app; the `drive.appdata` scope needs no
-  security assessment, unlike full Drive access). Book files optionally in a visible "GBook" folder (`drive.file`)
-  so a book added on one device appears on the other
-- [ ] **What syncs:** reading position and progress, highlights and notes, reactions, posts (likes, saves),
-  reading plans, collections, settings, and reading time
-- [ ] **Format:** one shared sync document (or one per book) that both apps read and write; document it under
-  `shared/` so the Kotlin and Rust sides agree
-- [ ] **Merging:**
-  - position: the most recently read device wins
-  - highlights, notes, posts, collections: merge by id, with tombstones so a deletion spreads instead of the item
-    coming back from the other device
-  - reading time: kept per device and summed, so nothing is double counted
-  - settings: last change wins, field by field
-- [ ] **When:** pull on app start and on opening a book; push after closing a book, on leaving the app, and every
-  few minutes while reading; poll the Drive changes feed instead of re-downloading everything
-- [ ] **Android:** Google sign-in and Drive authorization (Identity `AuthorizationClient`), Drive REST v3 calls;
-  local data stays the source of truth and works offline
-- [ ] **Desktop:** OAuth loopback sign-in in the browser (PKCE), token in the system keyring, same REST calls
-- [ ] **Google Cloud:** one project with an OAuth consent screen, Android and desktop client IDs
-- [ ] **UI:** Settings › Google Drive: "Sync with Google Drive" switch, account, "Synced 2 min ago", Sync now
-- [ ] **Testing:** phone and PC editing the same book offline, then both coming online; deleting on one side;
-  two phones on one account
+### Done
+- [x] **Storage:** sync document and book files in the Drive *appDataFolder* (`drive.appdata` scope only)
+- [x] **What syncs:** reading position and progress, highlights and notes, reactions, posts (likes, saves),
+  reading plans, collections, reminders, settings (not text size or margins), reading time and pages read
+- [x] **Format:** one shared document, field-by-field stamps and tombstones, documented in `shared/sync/` with
+  cases both test suites run (`cargo test -p gbook-core`, `./gradlew :app:testDebugUnitTest`)
+- [x] **Merging:** newest reading position wins (`positionAt`); items merge by id and deletions spread;
+  reading time is counted per device and summed; settings and other fields: last change wins, field by field
+- [x] **When:** on start and every 5 minutes, after closing a book, on leaving the app (Android) or quitting
+  (desktop); the document is only downloaded when its Drive version changed
+- [x] **Android:** `AuthorizationClient` sign-in, Drive REST v3; local data stays the source of truth
+- [x] **Desktop:** browser sign-in with PKCE on a loopback port, refresh token in the system keyring
+- [x] **UI:** Settings › Sync (desktop), Settings › Google Drive & backup (Android): sign in, status, Sync now,
+  Sync book files, sign out
+- [x] **Testing:** two desktop copies through `scripts/fake-drive.py`: books, positions, reading time, settings
+  and a deletion all crossed over
+
+### To do
+- [x] **Google Cloud:** project `ebook-513008`, Drive API, consent screen with `drive.appdata` + `email`,
+  Android clients for the release and debug keys, desktop client; site and privacy policy on GitHub Pages,
+  ownership verified in Search Console
+- [ ] **Google Cloud, still to do:** Android clients for the Play app-signing key (and the two Android 17
+  certificates), branding re-verification, publish to production; `GBOOK_GOOGLE_CLIENT_ID`/`_SECRET` repo secrets
+- [x] **Desktop on a real account:** signed in and synced the library to Drive
+- [x] **No blind overwrites:** first syncs only fill gaps, notes edited on both devices keep both texts,
+  the last 10 libraries before a sync are kept in `sync/history/`
+- [ ] "You read further on another device: jump there" in both readers
+- [ ] **Testing on real devices:** the Pixel and the PC on one account, both editing offline then coming online;
+  deleting on one side; two phones on one account
+- [ ] Profile picture sync
+- [ ] Show a sync status hint outside Settings (e.g. "Downloading 3 books…" on the Library)
 
 ## Android follow-ups
 - [ ] Scanned PDFs with no text layer (e.g. *Computer Lib*): show the rendered page images in reading mode
@@ -77,7 +85,7 @@ format. See the README's "Desktop app" section.
 - [x] Same `library.json` schema as Android, unknown fields preserved on save
 - [x] Import/export the Android backup `.zip` (library.json + books/)
 - [x] Data in `~/.local/share/gbook` (`$GBOOK_DATA_DIR` overrides)
-- [ ] Optional Google Drive sync via the Drive API: see "Google Drive sync" at the top
+- [x] Optional Google Drive sync via the Drive API: see "Google Drive sync" at the top
 
 ### Performance (measured with 100 books, release build)
 - [x] Cold start under 300 ms: ~250 ms to the first frame

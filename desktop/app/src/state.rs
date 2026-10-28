@@ -33,6 +33,7 @@ pub struct App {
     pub toast: RefCell<Option<Rc<dyn Fn(&str, bool)>>>,
     /// Opens a book in the reader; set by the shell.
     pub open_book: RefCell<Option<Rc<dyn Fn(&str, Option<(i32, i32)>)>>>,
+    pub sync: crate::sync::Sync,
 }
 
 pub type AppRc = Rc<App>;
@@ -41,6 +42,7 @@ impl App {
     pub fn new(paths: Paths) -> AppRc {
         let data = store::load(&paths);
         let p = theme::palette(&data.settings.accent);
+        let sync = crate::sync::Sync::new(&paths);
         Rc::new(App {
             paths,
             data: RefCell::new(data),
@@ -58,6 +60,7 @@ impl App {
             sheet_host: RefCell::new(None),
             toast: RefCell::new(None),
             open_book: RefCell::new(None),
+            sync,
         })
     }
 

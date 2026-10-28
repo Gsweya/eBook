@@ -220,8 +220,12 @@ impl LibraryData {
 
     pub fn save_position(&mut self, id: &str, pos: ReadingPosition, progress: f32) {
         if let Some(b) = self.book_mut(id) {
+            let progress = progress.clamp(0.0, 1.0);
+            if b.position != pos || b.progress != progress {
+                b.position_at = now_ms();
+            }
             b.position = pos;
-            b.progress = progress.clamp(0.0, 1.0);
+            b.progress = progress;
         }
     }
 

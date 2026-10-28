@@ -90,7 +90,8 @@ class Importer(private val ctx: Context, private val store: Store, private val s
                 chapterCount = r.content.chapters.size,
             )
         }
-        store.update { it.copy(books = it.books + book) }
+        // Another import of the same file (or a sync download) may have finished first.
+        store.update { d -> if (d.books.any { it.id == book.id }) d else d.copy(books = d.books + book) }
         if (isPdf) extractPdf(book)
         book
     }

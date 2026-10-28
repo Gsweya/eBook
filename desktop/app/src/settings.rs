@@ -1,4 +1,4 @@
-//! Settings, grouped as on the phone: Profile; Reading and Goals; Appearance; Backup; About. Each row opens
+//! Settings, grouped as on the phone: Profile; Reading and Goals; Appearance; Sync and Backup; About. Each row opens
 //! its own page within the tab.
 
 use std::cell::RefCell;
@@ -68,7 +68,7 @@ pub fn page(app: &AppRc, shell: &ShellRc) -> gtk::Widget {
     shell::scrolled_page(app, &top, &clamp.upcast(), r)
 }
 
-const PAGES: [(&str, &str, &str, &str); 6] = [
+const PAGES: [(&str, &str, &str, &str); 7] = [
     (
         "reading",
         "menu-book",
@@ -86,6 +86,12 @@ const PAGES: [(&str, &str, &str, &str); 6] = [
         "palette",
         "Appearance",
         "Mode, accent colour, pure black",
+    ),
+    (
+        "sync",
+        "sync",
+        "Sync",
+        "Google Drive: the same library on all your devices",
     ),
     (
         "backup",
@@ -237,7 +243,11 @@ fn main(app: &AppRc, content: &gtk::Box, nav: Rc<dyn Fn(Option<&str>)>) {
         ),
     )]));
     content.append(&group_title("Library"));
-    content.append(&group(vec![row("backup", None)]));
+    let sync_on = app.sync.state().enabled;
+    content.append(&group(vec![
+        row("sync", Some(if sync_on { "On" } else { "Off" }.to_string())),
+        row("backup", None),
+    ]));
     content.append(&group_title("About"));
     content.append(&group(vec![row(
         "about",
@@ -263,6 +273,7 @@ fn sub_page(app: &AppRc, content: &gtk::Box, page: &str) {
             card.append(&inner);
             content.append(&card);
         }
+        "sync" => sync_page(app, content),
         "backup" => backup_page(app, content),
         _ => about(app, content),
     }
@@ -591,6 +602,89 @@ fn goals(app: &AppRc, content: &gtk::Box) {
         chips.insert(&b, -1);
     }
     content.append(&chips);
+}
+
+fn sync_page(app: &AppRc, content: &gtk::Box) {
+    use crate::sync;
+    let st = app.sync.state();
+    content.append(&wrap_label(
+        "Keep your library the same on your computer and phone: reading places, highlights, notes, posts, collections, plans, settings and reading time. It's all kept in your own Google Drive, in a hidden folder only GBook can see.",
+        &["secondary"],
+        5,
+    ));
+    content.append(&group_title("Google Drive"));
+    if crate::drive::client().is_none() {
+        content.append(&group(vec![nav_row(
+            Some("info"),
+            "Not available in this build",
+            "GBook was built without a Google client ID. See docs/sync.md to set one up.",
+            None,
+            || {},
+        )]));
+        return;
+    }
+    let rows: Vec<gtk::Widget> = if app.sync.signing_in() {
+        let a = app.clone();
+        vec![nav_row(
+            Some("open-in-new"),
+            "Waiting for the browser…",
+            "Finish signing in there, or click here to cancel",
+            None,
+            move || sync::cancel_sign_in(&a),
+        )]
+    } else if !st.enabled {
+        let a = app.clone();
+        let sub: &str = if st.error.is_empty() {
+            "Opens your browser to sign in with your Google account"
+        } else {
+            &st.error
+        };
+        vec![nav_row(
+            Some("sync"),
+            "Sign In with Google…",
+            sub,
+            None,
+            move || sync::sign_in(&a),
+        )]
+    } else {
+        let (a1, a2, a3) = (app.clone(), app.clone(), app.clone());
+        vec![
+            nav_row(
+                Some("sync"),
+                "Sync Now",
+                &app.sync.status(),
+                None,
+                move || sync::sync_now(&a1),
+            ),
+            switch_row(
+                "Sync book files",
+                "Books added on one device download on the others. They count toward your Google Drive storage.",
+                st.sync_books,
+                move |on| sync::set_sync_books(&a2, on),
+            ),
+            nav_row(
+                Some("person"),
+                "Sign Out",
+                &format!("{} · Your library stays on this computer", st.account),
+                None,
+                move || sync::sign_out(&a3),
+            ),
+        ]
+    };
+    let g = group(rows);
+    content.append(&g);
+    // Show the new status whenever it changes, for as long as this page is open.
+    let (a, c, g) = (app.clone(), content.downgrade(), g.downgrade());
+    app.sync.on_change(move || {
+        let (Some(c), Some(g)) = (c.upgrade(), g.upgrade()) else {
+            return false;
+        };
+        if g.parent().as_ref() == Some(c.upcast_ref::<gtk::Widget>()) {
+            clear(&c);
+            sub_page(&a, &c, "sync");
+        }
+        false
+    });
 }
 
 fn backup_page(app: &AppRc, content: &gtk::Box) {

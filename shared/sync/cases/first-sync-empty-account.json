@@ -1,0 +1,326 @@
+{
+  "base": null,
+  "description": "First sync to an empty account: everything local goes up; position takes its own stamp.",
+  "device": "aaaa1111",
+  "doc": null,
+  "expect": {
+    "doc": {
+      "books": {
+        "b1": {
+          "f": {
+            "addedAt": [
+              1000,
+              "aaaa1111",
+              100
+            ],
+            "author": [
+              1000,
+              "aaaa1111",
+              "X"
+            ],
+            "fileName": [
+              1000,
+              "aaaa1111",
+              "book.epub"
+            ],
+            "format": [
+              1000,
+              "aaaa1111",
+              "EPUB"
+            ],
+            "id": [
+              1000,
+              "aaaa1111",
+              "b1"
+            ],
+            "lastOpenedAt": [
+              400,
+              "aaaa1111",
+              400
+            ],
+            "myReaction": [
+              1000,
+              "aaaa1111",
+              null
+            ],
+            "position": [
+              500,
+              "aaaa1111",
+              {
+                "chapter": 0,
+                "item": 0,
+                "offset": 0,
+                "pdfPage": 0
+              }
+            ],
+            "positionAt": [
+              500,
+              "aaaa1111",
+              500
+            ],
+            "progress": [
+              500,
+              "aaaa1111",
+              0.25
+            ],
+            "rating": [
+              1000,
+              "aaaa1111",
+              0
+            ],
+            "reactions": [
+              1000,
+              "aaaa1111",
+              {}
+            ],
+            "title": [
+              1000,
+              "aaaa1111",
+              "Book b1"
+            ]
+          }
+        }
+      },
+      "collections": {},
+      "counters": {
+        "aaaa1111": {
+          "bookDays": {
+            "2026-10-01": {
+              "b1": 60000
+            }
+          },
+          "pagesLog": {
+            "2026-10-01": 3
+          },
+          "pagesRead": {
+            "b1": 3
+          },
+          "readingLog": {
+            "2026-10-01": 60000
+          },
+          "readingMs": {
+            "b1": 60000
+          }
+        }
+      },
+      "format": 1,
+      "highlights": {
+        "h1": {
+          "f": {
+            "block": [
+              1000,
+              "aaaa1111",
+              1
+            ],
+            "bookId": [
+              1000,
+              "aaaa1111",
+              "b1"
+            ],
+            "chapter": [
+              1000,
+              "aaaa1111",
+              0
+            ],
+            "color": [
+              1000,
+              "aaaa1111",
+              0
+            ],
+            "createdAt": [
+              1000,
+              "aaaa1111",
+              200
+            ],
+            "end": [
+              1000,
+              "aaaa1111",
+              5
+            ],
+            "id": [
+              1000,
+              "aaaa1111",
+              "h1"
+            ],
+            "note": [
+              1000,
+              "aaaa1111",
+              null
+            ],
+            "start": [
+              1000,
+              "aaaa1111",
+              0
+            ],
+            "text": [
+              1000,
+              "aaaa1111",
+              "quote h1"
+            ]
+          }
+        }
+      },
+      "plans": {},
+      "posts": {},
+      "reminders": {},
+      "settings": {
+        "f": {
+          "accent": [
+            1000,
+            "aaaa1111",
+            "amber"
+          ],
+          "dailyGoalMin": [
+            1000,
+            "aaaa1111",
+            0
+          ]
+        }
+      }
+    },
+    "library": {
+      "bookDays": {
+        "2026-10-01": {
+          "b1": 60000
+        }
+      },
+      "books": [
+        {
+          "addedAt": 100,
+          "author": "X",
+          "backedUpAt": 0,
+          "chapterCount": 3,
+          "coverColor": 1,
+          "fileName": "book.epub",
+          "format": "EPUB",
+          "hasCover": true,
+          "id": "b1",
+          "lastOpenedAt": 400,
+          "myReaction": null,
+          "pageCount": 0,
+          "pagesRead": 3,
+          "position": {
+            "chapter": 0,
+            "item": 0,
+            "offset": 0,
+            "pdfPage": 0
+          },
+          "positionAt": 500,
+          "progress": 0.25,
+          "rating": 0,
+          "reactions": {},
+          "readingMs": 60000,
+          "textReady": true,
+          "textVersion": 0,
+          "title": "Book b1"
+        }
+      ],
+      "collections": [],
+      "highlights": [
+        {
+          "block": 1,
+          "bookId": "b1",
+          "chapter": 0,
+          "color": 0,
+          "createdAt": 200,
+          "end": 5,
+          "id": "h1",
+          "note": null,
+          "start": 0,
+          "text": "quote h1"
+        }
+      ],
+      "onboarded": true,
+      "pagesLog": {
+        "2026-10-01": 3
+      },
+      "plans": [],
+      "posts": [],
+      "readingLog": {
+        "2026-10-01": 60000
+      },
+      "reminders": [],
+      "seeded": true,
+      "settings": {
+        "accent": "amber",
+        "avatarVersion": 0,
+        "dailyGoalMin": 0,
+        "fontSize": 19.0,
+        "margin": 24
+      }
+    }
+  },
+  "local": {
+    "bookDays": {
+      "2026-10-01": {
+        "b1": 60000
+      }
+    },
+    "books": [
+      {
+        "addedAt": 100,
+        "author": "X",
+        "backedUpAt": 0,
+        "chapterCount": 3,
+        "coverColor": 1,
+        "fileName": "book.epub",
+        "format": "EPUB",
+        "hasCover": true,
+        "id": "b1",
+        "lastOpenedAt": 400,
+        "myReaction": null,
+        "pageCount": 0,
+        "pagesRead": 3,
+        "position": {
+          "chapter": 0,
+          "item": 0,
+          "offset": 0,
+          "pdfPage": 0
+        },
+        "positionAt": 500,
+        "progress": 0.25,
+        "rating": 0,
+        "reactions": {},
+        "readingMs": 60000,
+        "textReady": true,
+        "textVersion": 0,
+        "title": "Book b1"
+      }
+    ],
+    "collections": [],
+    "highlights": [
+      {
+        "block": 1,
+        "bookId": "b1",
+        "chapter": 0,
+        "color": 0,
+        "createdAt": 200,
+        "end": 5,
+        "id": "h1",
+        "note": null,
+        "start": 0,
+        "text": "quote h1"
+      }
+    ],
+    "onboarded": true,
+    "pagesLog": {
+      "2026-10-01": 3
+    },
+    "plans": [],
+    "posts": [],
+    "readingLog": {
+      "2026-10-01": 60000
+    },
+    "reminders": [],
+    "seeded": true,
+    "settings": {
+      "accent": "amber",
+      "avatarVersion": 0,
+      "dailyGoalMin": 0,
+      "fontSize": 19.0,
+      "margin": 24
+    }
+  },
+  "now": 1000,
+  "remote": null
+}

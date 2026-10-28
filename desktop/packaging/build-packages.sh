@@ -22,7 +22,7 @@ Version: $version
 Architecture: $arch
 Maintainer: Gsweya <https://github.com/Gsweya/eBook/issues>
 Installed-Size: $(du -sk "$stage/usr" | cut -f1)
-Depends: libgtk-4-1 (>= 4.14), libpoppler-glib8 | libpoppler-glib8t64, fontconfig
+Depends: libgtk-4-1 (>= 4.14), libpoppler-glib8 | libpoppler-glib8t64, libssl3 | libssl3t64, libdbus-1-3, fontconfig
 Section: text
 Priority: optional
 Homepage: https://github.com/Gsweya/eBook

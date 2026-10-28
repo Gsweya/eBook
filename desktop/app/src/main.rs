@@ -9,6 +9,7 @@
 mod badge;
 mod booksheet;
 mod devtools;
+mod drive;
 mod feed;
 mod import;
 mod library;
@@ -23,6 +24,7 @@ mod sheet;
 mod shell;
 mod sidebar;
 mod state;
+mod sync;
 mod theme;
 mod tracker;
 mod widgets;
@@ -241,6 +243,7 @@ fn main() -> glib::ExitCode {
                 shell::build(gapp, &app);
                 trace("window built");
                 import::add_starter(&app);
+                sync::start(&app);
             }
         }
     });
@@ -251,6 +254,7 @@ fn main() -> glib::ExitCode {
         if app.window().is_none() {
             shell::build(gapp, &app);
             import::add_starter(&app);
+            sync::start(&app);
         }
         if let Some(w) = app.window() {
             w.present();

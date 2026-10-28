@@ -53,6 +53,7 @@ import androidx.compose.foundation.verticalScroll
 import androidx.compose.material.icons.rounded.Check
 import androidx.compose.material.icons.rounded.KeyboardArrowDown
 import androidx.compose.ui.draw.rotate
+import androidx.compose.ui.geometry.CornerRadius
 import androidx.compose.ui.geometry.Offset
 import androidx.compose.ui.geometry.isSpecified
 import androidx.compose.ui.layout.LayoutCoordinates
@@ -100,6 +101,7 @@ import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.foundation.text.BasicTextField
 import androidx.compose.material.icons.Icons
+import androidx.compose.material.icons.automirrored.rounded.MenuBook
 import androidx.compose.material.icons.rounded.ArrowBackIosNew
 import androidx.compose.material.icons.rounded.AutoAwesome
 import androidx.compose.material.icons.rounded.ChevronLeft
@@ -356,6 +358,7 @@ private fun ReaderContent(
     var showSearch by remember { mutableStateOf(false) }
     var showGenerate by remember { mutableStateOf(false) }
     var searchTerm by remember { mutableStateOf<String?>(null) }
+    var defineWord by remember { mutableStateOf<String?>(null) }
     var sizeHud by remember { mutableStateOf(0) }
     // Selection loupe source point in reader coordinates; Unspecified hides it.
     var loupe by remember { mutableStateOf(Offset.Unspecified) }
@@ -551,6 +554,46 @@ private fun ReaderContent(
         if (!paged) return@LaunchedEffect
         withFrameNanos { }; withFrameNanos { }
         alignTop(forward = false)
+    }
+
+    // Coming back to a book (opening it, or returning to the app): the last line on screen, where reading
+    // stopped, is washed in the accent colour for a few seconds so the eye finds its place.
+    var resumeMark by remember { mutableStateOf<Pair<Int, Int>?>(null) }
+    val markFade = remember { Animatable(0f) }
+    var markRequest by remember { mutableIntStateOf(if (startChapter == null && (book.position.item > 0 || book.position.offset > 0 || book.progress > 0f)) 1 else 0) }
+    fun lastLineOnScreen(): Pair<Int, Int>? {
+        val cut = if (paged) pageCut() else contentBottom()
+        var best: Pair<Int, Int>? = null
+        for (it in listState.layoutInfo.visibleItemsInfo) {
+            val l = paras[it.index]?.layout ?: continue
+            val t = itemTop(it)
+            for (line in 0 until l.lineCount) {
+                if (t + l.getLineTop(line) < contentTop() - 0.5f) continue
+                if (t + l.getLineBottom(line) <= cut + 0.5f) best = it.index to line
+            }
+        }
+        return best
+    }
+    LaunchedEffect(markRequest) {
+        if (markRequest == 0) return@LaunchedEffect
+        // Let the saved position (and, in page mode, the whole-line alignment) settle first.
+        delay(450)
+        resumeMark = lastLineOnScreen() ?: return@LaunchedEffect
+        markFade.snapTo(0f)
+        markFade.animateTo(1f, tween(350))
+        delay(2600)
+        markFade.animateTo(0f, tween(900))
+        resumeMark = null
+    }
+    val lifecycle = androidx.lifecycle.compose.LocalLifecycleOwner.current.lifecycle
+    DisposableEffect(lifecycle) {
+        var stopped = false
+        val obs = androidx.lifecycle.LifecycleEventObserver { _, e ->
+            if (e == androidx.lifecycle.Lifecycle.Event.ON_STOP) stopped = true
+            if (e == androidx.lifecycle.Lifecycle.Event.ON_START && stopped) { stopped = false; markRequest++ }
+        }
+        lifecycle.addObserver(obs)
+        onDispose { lifecycle.removeObserver(obs) }
     }
 
     // Reading tracker: a marker stepped word by word (or sentence by sentence) by turning the wheel on the right edge.
@@ -784,6 +827,8 @@ private fun ReaderContent(
                                 searchTerm = searchTerm,
                                 tracked = track?.takeIf { s.tracker && it.block == i }?.let { units(i).getOrNull(it.unit) },
                                 trackColor = g.accent,
+                                markLine = resumeMark?.takeIf { it.first == i }?.second,
+                                markAlpha = { markFade.value },
                                 onTap = { off, w ->
                                     val hit = hls.firstOrNull { off in it.rangeIn(i, b.text.length) }
                                     if (hit != null) { activeHl = hit; sel = null } else onPageTap(root()?.windowToLocal(w)?.x ?: 0f)
@@ -988,6 +1033,10 @@ private fun ReaderContent(
                     shareText(ctx, "“${existing?.text ?: selText}”\n— ${book.title}, ${book.author}")
                     sel = null; activeHl = null
                 },
+                // Words and short phrases only: a whole passage has no dictionary entry.
+                onDefine = (existing?.text ?: selText)?.takeIf { it.isNotBlank() && it.length <= 60 && it.trim().split(Regex("\\s+")).size <= 4 }?.let { t ->
+                    { defineWord = t; sel = null; activeHl = null }
+                },
                 onDelete = { existing?.let { vm.deleteHighlight(it.id) }; activeHl = null },
             )
         }
@@ -1039,6 +1088,9 @@ private fun ReaderContent(
         searchTerm = term; showSearch = false; chrome = false; goTo(chIdx, block)
     }
     if (showGenerate) GeneratePostsSheet(vm, onDismiss = { showGenerate = false }, preselect = book.id)
+    defineWord?.let {
+        DefineSheet(vm, it, onDismiss = { defineWord = null }, onPost = { d -> vm.postWord(book.id, d, chapter, ch.title); defineWord = null })
+    }
     noteFor?.let { h ->
         NoteDialog(initial = h.note.orEmpty(), quote = h.text, onDismiss = { noteFor = null }) { note ->
             vm.updateHighlight(h.id) { it.copy(note = note) }; noteFor = null
@@ -1203,6 +1255,9 @@ private fun Paragraph(
     /** Reading-tracker unit to mark in this paragraph. */
     tracked: IntRange?,
     trackColor: Color,
+    /** Line to wash in [trackColor] where reading stopped, faded by [markAlpha] (read while drawing). */
+    markLine: Int?,
+    markAlpha: () -> Float,
     /** Character offset and window position of a tap. */
     onTap: (Int, Offset) -> Unit,
     onLong: (Offset) -> Unit,
@@ -1245,6 +1300,14 @@ private fun Paragraph(
                     underline(l, glyphs, it, trackColor, 2.dp.toPx(), 3.dp.toPx())
                 }
                 selection?.let { fill(l, glyphs, it, SelectionColor.copy(alpha = 0.7f)) }
+                markLine?.takeIf { it < l.lineCount }?.let { line ->
+                    val a = markAlpha()
+                    val top = l.getLineTop(line); val bottom = l.getLineBottom(line)
+                    drawRect(trackColor.copy(alpha = 0.16f * a), Offset(0f, top), Size(size.width, bottom - top))
+                    // A short bar in the margin beside the line.
+                    val w = 3.dp.toPx()
+                    drawRoundRect(trackColor.copy(alpha = a), Offset(-w - 8.dp.toPx(), top + 3.dp.toPx()), Size(w, bottom - top - 6.dp.toPx()), CornerRadius(w / 2))
+                }
             }
             .drawWithContent {
                 drawContent()
@@ -1491,6 +1554,8 @@ private fun SelectionBar(
     onCopy: () -> Unit,
     onShare: () -> Unit,
     onDelete: () -> Unit,
+    /** Null when the selection is too long to look up. */
+    onDefine: (() -> Unit)?,
 ) {
     val g = LocalG.current
     Column(
@@ -1535,6 +1600,7 @@ private fun SelectionBar(
         }
         Spacer(Modifier.height(10.dp))
         Row(Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.SpaceEvenly) {
+            onDefine?.let { BarAction(Icons.AutoMirrored.Rounded.MenuBook, "Define", it) }
             BarAction(Icons.Rounded.EditNote, "Note", onNote)
             BarAction(Icons.Rounded.FormatQuote, "Post", onPost)
             BarAction(Icons.Rounded.ContentCopy, "Copy", onCopy)
@@ -1547,7 +1613,7 @@ private fun SelectionBar(
 private fun BarAction(icon: androidx.compose.ui.graphics.vector.ImageVector, label: String, onClick: () -> Unit) {
     val g = LocalG.current
     Column(
-        Modifier.clip(RoundedCornerShape(16.dp)).clickable(onClick = onClick).padding(horizontal = 14.dp, vertical = 6.dp),
+        Modifier.clip(RoundedCornerShape(16.dp)).clickable(onClick = onClick).padding(horizontal = 10.dp, vertical = 6.dp),
         horizontalAlignment = Alignment.CenterHorizontally,
     ) {
         Icon(icon, label, tint = g.text, modifier = Modifier.size(24.dp))
@@ -1773,9 +1839,11 @@ private fun PagePreview(s: ReaderSettings, dark: Boolean, text: String, modifier
     val page = if (dark) rt.pageDark else rt.page
     val ink = if (dark) rt.textDark else rt.text
     val shape = RoundedCornerShape(22.dp)
+    // Only a few lines fit, so don't lay out (and hyphenate) the rest of a long paragraph when the sheet opens.
+    val shown = remember(text) { if (text.length <= 480) text else text.take(480).substringBeforeLast(' ') }
     Box(modifier.fillMaxWidth().height(168.dp).clip(shape).background(page).border(1.dp, g.separator, shape)) {
         Text(
-            text,
+            shown,
             style = TextStyle(
                 color = ink, fontSize = s.fontSize.sp, lineHeight = (s.fontSize * s.lineHeight).sp, fontFamily = readingFont(s.font).family,
                 fontWeight = if (s.bold || rt.bold) FontWeight.SemiBold else FontWeight.Normal,

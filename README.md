@@ -47,15 +47,18 @@ An open-source Android eReader for EPUB and PDF, built with Kotlin and Jetpack C
 
 - **Starts with a free book**: *Fractured Minds* by Galanda J. Sweya ships with the app, so there's something to read right away.
 - **Library** of EPUB and PDF books with covers, progress and reactions; add several books at once with the **+** button. A menu under the title switches between the overview, all books, collections, highlights and reading plans.
-- **Book page**: a full-screen sheet over the blurred cover with a star rating, reactions, and cards for highlights, reading plan, collections, posts, Drive export and removal.
+- **Book page**: a full-screen sheet over the blurred cover with a star rating, reactions, how long the book took you (days from start to finish, the dates, reading time and days read), and cards for highlights, reading plan, collections, posts, Drive export and removal.
 - **Collections**: select books and group them into named collections.
 - **Search** tab for books, authors, collections and highlights.
+- **Launch splash**: the book icon opens on the accent circle and fades into the app, in light or dark.
 - **First-run welcome**: a short splash, then set up your profile picture (with a circle cropper) and import your first books.
 - **Reading time**: today's minutes, a 7-day chart, streak and all-time totals, plus time spent in each book.
 - **Reader** with a bar of quick buttons for search, text (**Aa**), contents and the rest of the reading options: ten open-licence reading fonts (including Libre Baskerville), text size buttons and pinch-to-resize, page themes, line spacing and adjustable margins, each sheet with a live preview of the page you're on. Long chapter names scroll instead of being cut off.
 - **Daily goal ring**: in the reader your profile picture is ringed with today's progress toward your reading goal; tap it for today's minutes, this sitting and the book's reading plan.
 - **Scroll or turn pages**: scroll through a whole chapter, or read one page at a time and tap or swipe to turn. Both show the page number, pages left in the chapter and a progress line.
 - **Reading tracker**: turn the wheel on the right edge to move a marker through the text word by word or sentence by sentence. Pick a highlight colour in its options and turning the wheel highlights what the marker passes. The wheel can sit in the middle or at the bottom of the screen.
+- **Dictionary**: select a word and tap **Define**. The first time, choose to download WordNet (about 10 MB, then fully offline) or to look words up online with the Free Dictionary API; switch or remove it in Settings › Reading.
+- **Where you left off**: opening a book, or coming back to the app, briefly marks the last line you were reading.
 - **Highlights** across paragraphs with drag handles, a lens loupe, and a marker or underline style, grouped by book in the Library and searchable by book or wording.
 - **Feed** of posts built on-device from chapter key ideas, recap carousels and your highlights.
 - **PDF** page view with zoom, plus a reflowed text mode that reads like an EPUB: paragraphs, headings and named chapters are rebuilt from the page layout, figures and photos are placed where they appear in the text, and running headers and page numbers are dropped.
@@ -70,6 +73,7 @@ Requires JDK 21 and the Android SDK (compileSdk 36).
 ```sh
 cd gbook
 ./gradlew installDebug        # debug build on a connected phone
+./gradlew installDebug -Pdev  # same, as a separate "GBook Dev" app next to the Play Store one
 ./gradlew assembleRelease     # release APK in app/build/outputs/apk/release/
 ```
 

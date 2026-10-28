@@ -114,10 +114,7 @@ fun FeedTab(vm: AppViewModel, nav: Nav, onGenerate: () -> Unit, onScrollDir: (Bo
     }
     val books = remember(data.books) { data.books.associateBy { it.id } }
     val list = rememberLazyListState()
-    var last by remember { mutableStateOf(0) }
-    LaunchedEffect(list.firstVisibleItemIndex) {
-        onScrollDir(list.firstVisibleItemIndex > last); last = list.firstVisibleItemIndex
-    }
+    ScrollDirection({ list.firstVisibleItemIndex * 10_000 + list.firstVisibleItemScrollOffset }, onScrollDir)
 
     LazyColumn(state = list, modifier = Modifier.fillMaxSize(), contentPadding = PaddingValues(bottom = bottomBarClearance())) {
         item {
@@ -174,7 +171,7 @@ fun PostCard(vm: AppViewModel, post: Post, book: Book, onOpen: () -> Unit) {
                 Text(post.chapterTitle.ifBlank { book.author }, fontSize = 14.sp, color = g.text2, maxLines = 1, overflow = TextOverflow.Ellipsis)
             }
             Text(
-                when (post.kind) { PostKind.QUOTE -> "Highlight"; PostKind.IDEA -> "Key idea"; PostKind.RECAP -> "Recap" },
+                if (post.word != null) "Word" else when (post.kind) { PostKind.QUOTE -> "Highlight"; PostKind.IDEA -> "Key idea"; PostKind.RECAP -> "Recap" },
                 fontSize = 13.sp, fontWeight = FontWeight.SemiBold, color = g.text2,
                 modifier = Modifier.background(g.fill, CircleShape).padding(horizontal = 10.dp, vertical = 4.dp),
             )
@@ -260,7 +257,11 @@ private fun PostSlide(vm: AppViewModel, post: Post, book: Book, page: Int) {
     val s = slideStyle(post.style, Color(book.coverColor))
     val text = post.slides[page]
     val isRecapTitle = post.kind == PostKind.RECAP && page == 0
+    val word = post.word
+    // A word post's slides read "part of speech · meaning".
+    val (pos, meaning) = if (word != null) text.substringBefore(" · ", "") to text.substringAfter(" · ") else "" to text
     val eyebrow = when {
+        word != null -> if (pos.isNotEmpty()) "WORD · ${pos.uppercase()}" else "WORD"
         post.kind == PostKind.QUOTE && page == 1 -> "MY NOTE"
         post.kind == PostKind.QUOTE -> "HIGHLIGHT"
         post.kind == PostKind.IDEA -> "KEY IDEA"
@@ -270,7 +271,16 @@ private fun PostSlide(vm: AppViewModel, post: Post, book: Book, page: Int) {
     Column(Modifier.fillMaxSize().background(s.bg).padding(28.dp)) {
         Text(eyebrow, color = s.accent, style = GType.eyebrow)
         Box(Modifier.weight(1f).fillMaxWidth(), contentAlignment = Alignment.CenterStart) {
-            if (isRecapTitle) {
+            if (word != null) {
+                Column {
+                    Text(word, color = s.text, fontFamily = DisplaySerif, fontWeight = FontWeight.Bold, fontSize = 40.sp, lineHeight = 46.sp)
+                    Text(
+                        meaning, color = s.text, fontFamily = QuoteSerif, fontSize = if (meaning.length < 120) 22.sp else 19.sp,
+                        lineHeight = if (meaning.length < 120) 29.sp else 25.sp, overflow = TextOverflow.Ellipsis, maxLines = 10,
+                        modifier = Modifier.padding(top = 14.dp),
+                    )
+                }
+            } else if (isRecapTitle) {
                 Column {
                     Text(text, color = s.text, fontFamily = DisplaySerif, fontWeight = FontWeight.Bold, fontSize = 34.sp, lineHeight = 40.sp)
                     Text("Swipe for the key points  →", color = s.accent, fontSize = 16.sp, modifier = Modifier.padding(top = 16.dp))

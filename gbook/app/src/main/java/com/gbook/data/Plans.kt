@@ -20,7 +20,7 @@ class PlanStatus(
 fun planStatus(plan: ReadingPlan, book: Book, today: LocalDate = LocalDate.now()): PlanStatus {
     val target = LocalDate.parse(plan.targetDate)
     val start = LocalDate.parse(plan.startDate)
-    val done = book.progress >= 0.995f
+    val done = book.progress >= FINISHED
     val daysLeft = ChronoUnit.DAYS.between(today, target).toInt() + 1
     val total = (ChronoUnit.DAYS.between(start, target).toInt() + 1).coerceAtLeast(1)
     val elapsed = ChronoUnit.DAYS.between(start, today).toInt().coerceIn(0, total)

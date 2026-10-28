@@ -5,6 +5,9 @@ import android.net.Uri
 import androidx.lifecycle.AndroidViewModel
 import androidx.lifecycle.viewModelScope
 import com.gbook.data.Backup
+import com.gbook.data.Definition
+import com.gbook.data.Dictionary
+import com.gbook.data.FINISHED
 import com.gbook.data.Book
 import com.gbook.data.BookCollection
 import com.gbook.data.BookFormat
@@ -36,6 +39,9 @@ class AppViewModel(app: Application) : AndroidViewModel(app) {
     /** Google Drive sync between this phone and GBook on other devices. */
     val drive = DriveSync(app, store, importer, onApplied = { syncReminders() })
 
+    /** Word definitions, downloaded for offline use or looked up online. */
+    val dictionary = Dictionary(app)
+
     /** Transient toast message shown by the app shell. */
     val toast = MutableStateFlow<String?>(null)
     /** Non-null while a long-running task (import, backup) is in progress. */
@@ -56,6 +62,8 @@ class AppViewModel(app: Application) : AndroidViewModel(app) {
             d.books.filter { b -> b.format == BookFormat.PDF && b.textReady && b.textVersion < PdfSupport.TEXT_VERSION && d.highlights.none { it.bookId == b.id } }
                 .forEach { importer.extractPdf(it) }
         }
+        // A dictionary download from an earlier run may have finished (or still be going) while GBook was closed.
+        if (dictionary.pending) downloadDictionary()
         ReminderScheduler.ensureChannel(app)
         ReminderScheduler.sync(app, store.data.value.reminders)
     }
@@ -76,7 +84,7 @@ class AppViewModel(app: Application) : AndroidViewModel(app) {
         store.update { d ->
             d.copy(
                 goalReachedDay = if (reached) day else d.goalReachedDay,
-                books = d.books.map { if (it.id == bookId) it.copy(readingMs = it.readingMs + ms) else it },
+                books = d.books.map { if (it.id == bookId) it.copy(readingMs = it.readingMs + ms, startedAt = it.startedAt.takeIf { s -> s > 0 } ?: System.currentTimeMillis()) else it },
                 readingLog = d.readingLog + (day to (d.readingLog[day] ?: 0L) + ms),
                 bookDays = d.bookDays + (day to (d.bookDays[day].orEmpty().let { m -> m + (bookId to (m[bookId] ?: 0L) + ms) })),
             )
@@ -159,6 +167,13 @@ class AppViewModel(app: Application) : AndroidViewModel(app) {
         toast(if (failed == 0) "Added $added books" else "Added $added books · $failed couldn't be opened")
     }
 
+    /** Fetches the offline dictionary in the background; it carries on if the sheet that started it closes. */
+    fun downloadDictionary() = viewModelScope.launch {
+        runCatching { dictionary.download() }
+            .onSuccess { toast("Dictionary ready: it works offline now") }
+            .onFailure { toast("Couldn't download the dictionary: ${it.message ?: "check your connection"}") }
+    }
+
     fun finishOnboarding() = store.update { it.copy(onboarded = true) }
 
     /** Counts [n] more pages read in a book and in today's total. */
@@ -193,7 +208,10 @@ class AppViewModel(app: Application) : AndroidViewModel(app) {
 
     fun savePosition(id: String, pos: ReadingPosition, progress: Float) = store.updateBook(id) {
         val p = progress.coerceIn(0f, 1f)
-        if (it.position == pos && it.progress == p) it else it.copy(position = pos, progress = p, positionAt = System.currentTimeMillis())
+        val now = System.currentTimeMillis()
+        // The first time the end is reached is when the book was finished; reading it again later keeps that date.
+        val finishedAt = if (it.finishedAt == 0L && p >= FINISHED) now else it.finishedAt
+        if (it.position == pos && it.progress == p) it else it.copy(position = pos, progress = p, positionAt = now, finishedAt = finishedAt)
     }
 
     fun updateSettings(f: (ReaderSettings) -> ReaderSettings) = store.update { it.copy(settings = f(it.settings)) }
@@ -241,6 +259,14 @@ class AppViewModel(app: Application) : AndroidViewModel(app) {
 
     fun deleteHighlight(id: String) = store.update { d ->
         d.copy(highlights = d.highlights.filterNot { it.id == id }, posts = d.posts.filterNot { it.highlightId == id })
+    }
+
+    /** Puts a looked-up word in the Feed; posting the same word from the same book again replaces it. */
+    fun postWord(bookId: String, d: Definition, chapter: Int, chapterTitle: String) {
+        val book = store.book(bookId) ?: return
+        val p = PostGenerator.fromWord(book, d, chapter, chapterTitle)
+        store.update { it.copy(posts = listOf(p) + it.posts.filterNot { o -> o.id == p.id }) }
+        toast("Posted “${d.word}” to your Feed")
     }
 
     fun postFromHighlight(h: Highlight, chapterTitle: String) {

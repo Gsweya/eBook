@@ -5,6 +5,9 @@ import android.content.Intent
 import android.graphics.Bitmap
 import androidx.compose.foundation.layout.ColumnScope
 import androidx.compose.foundation.layout.Row
+import androidx.compose.foundation.layout.WindowInsets
+import androidx.compose.foundation.layout.asPaddingValues
+import androidx.compose.foundation.layout.statusBars
 import androidx.compose.foundation.layout.Spacer
 import androidx.compose.foundation.layout.fillMaxHeight
 import androidx.compose.foundation.layout.fillMaxWidth
@@ -24,6 +27,7 @@ import androidx.compose.runtime.Composable
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.graphics.Color
+import androidx.compose.ui.layout.layout
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
@@ -53,8 +57,23 @@ fun GSheet(
         shape = RoundedCornerShape(topStart = 38.dp, topEnd = 38.dp),
         dragHandle = null,
         scrimColor = Color.Black.copy(alpha = 0.22f),
+        // The default insets pad the sheet's top by however much of the status bar it currently covers. That
+        // padding changes the sheet's height, the height moves where the sheet rests, and that changes the
+        // padding again, so a tall sheet never settles and keeps bouncing. Instead the sheet stops short of the
+        // status bar, so its size never depends on where it is.
+        contentWindowInsets = { WindowInsets(0) },
     ) {
-        Column(Modifier.navigationBarsPadding().then(if (heightFraction != null) Modifier.fillMaxHeight(heightFraction) else Modifier)) {
+        val statusBar = WindowInsets.statusBars.asPaddingValues().calculateTopPadding()
+        Column(
+            Modifier
+                .layout { m, c ->
+                    val room = (c.maxHeight - statusBar.roundToPx()).coerceAtLeast(0)
+                    val p = m.measure(c.copy(maxHeight = room, minHeight = c.minHeight.coerceAtMost(room)))
+                    layout(p.width, p.height) { p.place(0, 0) }
+                }
+                .navigationBarsPadding()
+                .then(if (heightFraction != null) Modifier.fillMaxHeight(heightFraction) else Modifier),
+        ) {
             Row(Modifier.fillMaxWidth().padding(start = 24.dp, end = 16.dp, top = 18.dp, bottom = 8.dp), verticalAlignment = Alignment.CenterVertically) {
                 Text(title, fontSize = 26.sp, fontWeight = FontWeight.SemiBold, color = g.text, modifier = Modifier.weight(1f))
                 trailing?.invoke()
@@ -89,7 +108,7 @@ fun shareImage(ctx: Context, bitmap: Bitmap, text: String) {
     val f = File(dir, "gbook-post-${System.currentTimeMillis() % 100000}.png")
     val soft = if (bitmap.config == Bitmap.Config.HARDWARE) bitmap.copy(Bitmap.Config.ARGB_8888, false) else bitmap
     f.outputStream().use { soft.compress(Bitmap.CompressFormat.PNG, 100, it) }
-    val uri = FileProvider.getUriForFile(ctx, "com.gbook.files", f)
+    val uri = FileProvider.getUriForFile(ctx, ctx.packageName + ".files", f)
     val i = Intent(Intent.ACTION_SEND).setType("image/png")
         .putExtra(Intent.EXTRA_STREAM, uri)
         .putExtra(Intent.EXTRA_TEXT, text)

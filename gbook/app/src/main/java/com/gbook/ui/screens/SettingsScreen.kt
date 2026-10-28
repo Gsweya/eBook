@@ -94,6 +94,7 @@ import androidx.compose.foundation.verticalScroll
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.rounded.Check
 import androidx.compose.material.icons.rounded.CloudDownload
+import androidx.compose.material.icons.rounded.DeleteOutline
 import androidx.compose.material.icons.rounded.CloudUpload
 import androidx.compose.material.icons.rounded.FileOpen
 import androidx.compose.material3.HorizontalDivider
@@ -117,6 +118,7 @@ import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import com.gbook.AppViewModel
+import com.gbook.data.Dictionary
 import com.gbook.data.ReaderSettings
 import com.gbook.ui.components.GSheet
 import com.gbook.ui.components.GSwitch
@@ -185,7 +187,7 @@ private fun SettingsRoot(vm: AppViewModel, onPage: (String?) -> Unit, onScrollDi
     val s = data.settings
     val list = rememberLazyListState()
     val version = remember(ctx) { runCatching { ctx.packageManager.getPackageInfo(ctx.packageName, 0).versionName }.getOrNull() ?: "" }
-    ScrollDirection(list.firstVisibleItemIndex, list.firstVisibleItemScrollOffset, onScrollDir)
+    ScrollDirection({ list.firstVisibleItemIndex * 10_000 + list.firstVisibleItemScrollOffset }, onScrollDir)
     fun page(id: String) = Pages.first { it.id == id }
     @Composable
     fun Row(id: String, trailing: String? = null) = page(id).let { p -> SettingsNavRow(p.icon, p.title, p.subtitle, trailing) { onPage(id) } }
@@ -288,7 +290,7 @@ private fun SettingsFooter(version: String) {
 private fun SettingsSubPage(title: String, onBack: () -> Unit, onScrollDir: (Boolean) -> Unit, content: @Composable ColumnScope.() -> Unit) {
     val g = LocalG.current
     val scroll = rememberScrollState()
-    ScrollDirection(0, scroll.value, onScrollDir)
+    ScrollDirection({ scroll.value }, onScrollDir)
     Column(Modifier.fillMaxSize().verticalScroll(scroll).padding(bottom = bottomBarClearance())) {
         // Back arrow sits inline with the large title.
         Row(Modifier.statusBarsPadding().padding(start = 6.dp, end = 20.dp, top = 40.dp, bottom = 4.dp), verticalAlignment = Alignment.CenterVertically) {
@@ -456,6 +458,56 @@ private fun ReadingPage(vm: AppViewModel) {
             vm.updateSettings { it.copy(autoPostHighlights = on) }
         }
     }
+    DictionarySection(vm)
+}
+
+/** Where "Define" looks words up: the downloaded dictionary or online; the download can be removed again. */
+@Composable
+private fun DictionarySection(vm: AppViewModel) {
+    val g = LocalG.current
+    val dict = vm.dictionary
+    val source by dict.source.collectAsState()
+    val downloading by dict.progress.collectAsState()
+    val installed = remember(source, downloading) { dict.installed }
+    SectionLabel("Dictionary")
+    Text(
+        "Select a word while reading and tap Define.",
+        style = GType.secondary, color = g.text2, modifier = Modifier.padding(start = 20.dp, end = 20.dp, bottom = 8.dp),
+    )
+    SettingsCard {
+        Row(Modifier.fillMaxWidth().padding(horizontal = 20.dp, vertical = 12.dp), verticalAlignment = Alignment.CenterVertically) {
+            Text("Look words up", fontSize = 17.sp, color = g.text, modifier = Modifier.weight(1f))
+            Segmented(listOf("Offline", "Online"), selected = when (source) { Dictionary.Source.OFFLINE -> 0; Dictionary.Source.ONLINE -> 1; else -> -1 }, onSelect = { i ->
+                if (i == 1) dict.choose(Dictionary.Source.ONLINE)
+                else if (installed) dict.choose(Dictionary.Source.OFFLINE) else vm.downloadDictionary()
+            })
+        }
+        HorizontalDivider(Modifier.padding(start = 62.dp), color = g.separator)
+        val p = downloading
+        when {
+            p != null -> {
+                val left by dict.secondsLeft.collectAsState()
+                val got by dict.bytes.collectAsState()
+                SyncRow(
+                    Icons.Rounded.CloudDownload, "Downloading… ${(p * 100).toInt()}%",
+                    Dictionary.sizeText(got.first, got.second) + (Dictionary.timeLeft(left)?.let { " · $it" } ?: ""),
+                ) {}
+            }
+            installed -> SyncRow(
+                Icons.Rounded.DeleteOutline, "Remove offline dictionary",
+                "Frees ${android.text.format.Formatter.formatShortFileSize(LocalContext.current, dict.installedBytes)}" +
+                    if (source == Dictionary.Source.OFFLINE) " · lookups go online after" else "",
+            ) {
+                dict.deleteOffline()
+                if (source == Dictionary.Source.OFFLINE) dict.choose(Dictionary.Source.ONLINE)
+            }
+            else -> SyncRow(Icons.Rounded.CloudDownload, "Download for offline use", "About 10 MB, once. Nothing you look up leaves your phone.") { vm.downloadDictionary() }
+        }
+    }
+    Text(
+        "Offline: WordNet 3.1 (Princeton University). Online: the Free Dictionary API, which receives each word you look up.",
+        style = GType.caption, color = g.text2, modifier = Modifier.fillMaxWidth().padding(horizontal = 36.dp, vertical = 10.dp),
+    )
 }
 
 @Composable
@@ -632,7 +684,7 @@ private fun AboutPage(vm: AppViewModel) {
         )
     }
     Text(
-        "GBook is open source (MIT). Reading fonts: Literata, Charis SIL, Source Serif, Newsreader, Gelasio, Crimson Pro, EB Garamond, Libre Baskerville, Inter and DM Sans — SIL Open Font License. 3D icons: Noto 3D Emoji — Apache License 2.0.",
+        "GBook is open source (MIT). Reading fonts: Literata, Charis SIL, Source Serif, Newsreader, Gelasio, Crimson Pro, EB Garamond, Libre Baskerville, Inter and DM Sans — SIL Open Font License. 3D icons: Noto 3D Emoji — Apache License 2.0. Offline dictionary: WordNet 3.1, Princeton University, with word forms from Open English WordNet — CC BY 4.0.",
         style = GType.caption, color = g.text2,
         modifier = Modifier.fillMaxWidth().padding(horizontal = 36.dp, vertical = 10.dp),
     )

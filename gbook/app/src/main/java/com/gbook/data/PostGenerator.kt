@@ -49,6 +49,16 @@ object PostGenerator {
         }.toMap()
     }
 
+    /** A word looked up while reading, one slide per meaning (up to three, most common parts of speech first). */
+    fun fromWord(book: Book, d: Definition, chapter: Int, chapterTitle: String): Post {
+        val picked = d.senses.groupBy { it.pos }.values.flatMap { it.take(2) }.take(3)
+        return Post(
+            id = "w-" + book.id.take(6) + "-" + d.word.lowercase().hashCode().toUInt().toString(16), bookId = book.id,
+            kind = PostKind.IDEA, slides = picked.map { "${it.pos} · ${it.meaning.replaceFirstChar(Char::uppercase)}" },
+            chapterTitle = chapterTitle, chapter = chapter, style = 4, word = d.word,
+        )
+    }
+
     fun fromHighlight(book: Book, h: Highlight, chapterTitle: String) = Post(
         id = "p-" + h.id, bookId = book.id, kind = PostKind.QUOTE,
         slides = listOfNotNull(tidyQuote(h.text), h.note?.takeIf { it.isNotBlank() }),

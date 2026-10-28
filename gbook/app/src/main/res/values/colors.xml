@@ -1,0 +1,6 @@
+<?xml version="1.0" encoding="utf-8"?>
+<resources>
+    <!-- The app's page colours (Theme.kt), so the window and launch splash match the first frame. -->
+    <color name="window_bg">#FFF6F6F7</color>
+    <color name="splash_icon_bg">#FFF28C28</color>
+</resources>

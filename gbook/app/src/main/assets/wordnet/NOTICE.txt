@@ -1,0 +1,4 @@
+noun.exc, verb.exc, adj.exc and adv.exc are the irregular word-form lists of Open English WordNet 2025
+(https://en-word.net, https://github.com/globalwordnet/english-wordnet), copyright the Open English WordNet team,
+used unchanged under the Creative Commons Attribution 4.0 International License
+(https://creativecommons.org/licenses/by/4.0/).

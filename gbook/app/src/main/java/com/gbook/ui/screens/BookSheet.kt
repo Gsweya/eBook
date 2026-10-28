@@ -30,6 +30,8 @@ import androidx.compose.material.icons.rounded.CloudUpload
 import androidx.compose.material.icons.rounded.CollectionsBookmark
 import androidx.compose.material.icons.rounded.DeleteOutline
 import androidx.compose.material.icons.rounded.EventAvailable
+import androidx.compose.material.icons.rounded.Flag
+import androidx.compose.material.icons.rounded.Schedule
 import androidx.compose.material.icons.rounded.FormatQuote
 import androidx.compose.material.icons.rounded.Star
 import androidx.compose.material.icons.rounded.StarBorder
@@ -66,6 +68,8 @@ import com.gbook.Nav
 import com.gbook.Route
 import com.gbook.data.BookFormat
 import com.gbook.data.ReactionEmojis
+import com.gbook.data.ReadThrough
+import com.gbook.data.readThrough
 import com.gbook.data.dueLabel
 import com.gbook.data.planStatus
 import com.gbook.ui.components.BookCover
@@ -162,6 +166,7 @@ fun BookSheet(vm: AppViewModel, id: String, nav: Nav, onDismiss: () -> Unit) {
                     onClick = { close { vm.markOpened(book.id); nav.open(book) } },
                     modifier = Modifier.fillMaxWidth().padding(top = 20.dp),
                 )
+                readThrough(book, data.bookDays)?.let { ReadThroughCard(it, Modifier.padding(top = 16.dp)) }
                 val cards = listOf<@Composable (Modifier) -> Unit>(
                     { m -> OptionCard(Icons.Rounded.FormatQuote, "Highlights", if (highlights > 0) plural(highlights, "highlight") else "None yet", m) { close { nav.push(Route.Highlights(book.id)) } } },
                     { m -> OptionCard(Icons.Rounded.EventAvailable, "Reading plan", plan?.let { p -> planStatus(p, book).let { if (it.done) "Done" else it.dueLabel() } } ?: "Set a goal", m) { showPlan = true } },
@@ -221,5 +226,37 @@ private fun OptionCard(icon: ImageVector, label: String, value: String, modifier
         Spacer(Modifier.weight(1f))
         Text(label, color = if (tint == g.destructive) tint else g.text, fontSize = 17.sp, fontWeight = FontWeight.SemiBold, maxLines = 1, overflow = TextOverflow.Ellipsis)
         Text(value, color = g.text2, fontSize = 14.sp, maxLines = 1, overflow = TextOverflow.Ellipsis)
+    }
+}
+
+/** How long the book took (or has taken so far): days from start to finish, the dates, and the time spent reading it. */
+@Composable
+private fun ReadThroughCard(r: ReadThrough, modifier: Modifier = Modifier) {
+    val g = LocalG.current
+    val shape = RoundedCornerShape(22.dp)
+    Column(modifier.fillMaxWidth().clip(shape).background(if (g.dark) g.fill else g.surface).border(0.7.dp, g.separator, shape).padding(18.dp)) {
+        Row(verticalAlignment = Alignment.CenterVertically) {
+            Box(Modifier.size(38.dp).clip(CircleShape).background(g.accent.copy(alpha = 0.14f)), contentAlignment = Alignment.Center) {
+                Icon(if (r.finished) Icons.Rounded.Flag else Icons.Rounded.Schedule, null, tint = g.accent, modifier = Modifier.size(21.dp))
+            }
+            Column(Modifier.padding(start = 12.dp)) {
+                Text(r.headline(), color = g.text, fontFamily = DisplaySerif, fontWeight = FontWeight.Bold, fontSize = 20.sp)
+                Text(r.dateRange(), color = g.text2, fontSize = 14.sp)
+            }
+        }
+        Row(Modifier.padding(top = 14.dp).fillMaxWidth()) {
+            ReadStat(formatDuration(r.readingMs), "reading time", Modifier.weight(1f))
+            ReadStat("${r.readingDays}", if (r.readingDays == 1) "day read" else "days read", Modifier.weight(1f))
+            ReadStat(if (r.readingDays > 0) formatDuration(r.readingMs / r.readingDays) else "–", "a reading day", Modifier.weight(1f))
+        }
+    }
+}
+
+@Composable
+private fun ReadStat(value: String, label: String, modifier: Modifier) {
+    val g = LocalG.current
+    Column(modifier) {
+        Text(value, color = g.text, fontSize = 18.sp, fontWeight = FontWeight.SemiBold, maxLines = 1)
+        Text(label, color = g.text2, fontSize = 13.sp, maxLines = 1)
     }
 }

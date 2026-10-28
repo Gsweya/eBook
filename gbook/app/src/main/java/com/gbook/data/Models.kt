@@ -44,6 +44,10 @@ data class Book(
     val rating: Int = 0,
     /** When the reading position last changed; sync lets the device that read most recently win. */
     val positionAt: Long = 0,
+    /** When reading time was first counted in this book; 0 until then. */
+    val startedAt: Long = 0,
+    /** When the reader first reached the end of the book; 0 while unfinished. */
+    val finishedAt: Long = 0,
 )
 
 @Serializable
@@ -96,6 +100,8 @@ data class Post(
     val saved: Boolean = false,
     val reactions: Map<String, Int> = emptyMap(),
     val myReaction: String? = null,
+    /** For a word posted from the dictionary: the word. Its slides are "part of speech · meaning". */
+    val word: String? = null,
 )
 
 @Serializable

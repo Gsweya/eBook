@@ -61,6 +61,7 @@ import com.gbook.Nav
 import com.gbook.Route
 import com.gbook.data.Book
 import com.gbook.data.BookFormat
+import com.gbook.data.FINISHED
 import com.gbook.ui.components.BookCover
 import com.gbook.ui.theme.AppSans
 import com.gbook.ui.theme.GType
@@ -81,7 +82,7 @@ fun SearchTab(vm: AppViewModel, nav: Nav, onScrollDir: (Boolean) -> Unit) {
     val focus = remember { FocusRequester() }
     val focusManager = LocalFocusManager.current
     val list = rememberLazyListState()
-    ScrollDirection(list.firstVisibleItemIndex, list.firstVisibleItemScrollOffset, onScrollDir)
+    ScrollDirection({ list.firstVisibleItemIndex * 10_000 + list.firstVisibleItemScrollOffset }, onScrollDir)
     LaunchedEffect(Unit) { if (q.isEmpty()) focus.requestFocus() }
 
     val term = fold(q.trim())
@@ -152,7 +153,7 @@ fun SearchTab(vm: AppViewModel, nav: Nav, onScrollDir: (Boolean) -> Unit) {
                     subtitle = listOfNotNull(
                         b.author,
                         if (b.format == BookFormat.PDF) "PDF" else null,
-                        when { b.progress >= 0.995f -> "Finished"; b.progress > 0f -> "${(b.progress * 100).toInt()}%"; else -> null },
+                        when { b.progress >= FINISHED -> "Finished"; b.progress > 0f -> "${(b.progress * 100).toInt()}%"; else -> null },
                     ).joinToString(" · "),
                 )
             }

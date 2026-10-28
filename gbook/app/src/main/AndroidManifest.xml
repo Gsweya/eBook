@@ -8,12 +8,13 @@
         android:allowBackup="true"
         android:icon="@mipmap/ic_launcher"
         android:roundIcon="@mipmap/ic_launcher_round"
-        android:label="GBook"
+        android:label="${appLabel}"
         android:largeHeap="true"
         android:supportsRtl="true"
         android:theme="@style/Theme.GBook">
         <activity
             android:name=".MainActivity"
+            android:theme="@style/Theme.GBook.Starting"
             android:exported="true"
             android:launchMode="singleTask"
             android:windowSoftInputMode="adjustResize">
@@ -33,7 +34,7 @@
         </activity>
         <provider
             android:name="androidx.core.content.FileProvider"
-            android:authorities="com.gbook.files"
+            android:authorities="${applicationId}.files"
             android:exported="false"
             android:grantUriPermissions="true">
             <meta-data

@@ -162,7 +162,7 @@ fun PillButton(
         if (icon != null) {
             Icon(icon, null, tint = c, modifier = Modifier.size(20.dp)); Spacer(Modifier.width(8.dp))
         }
-        Text(text, color = c, fontSize = 17.sp, fontWeight = FontWeight.Medium, maxLines = 1, modifier = if (scrollOverflow) Modifier.basicMarquee(iterations = Int.MAX_VALUE, initialDelayMillis = 1000) else Modifier)
+        Text(text, color = c, fontSize = 17.sp, fontWeight = FontWeight.Medium, maxLines = 1, modifier = if (scrollOverflow) Modifier.basicMarquee(iterations = 3, initialDelayMillis = 1000) else Modifier)
     }
 }
 

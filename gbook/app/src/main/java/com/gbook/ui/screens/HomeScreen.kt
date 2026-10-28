@@ -92,6 +92,12 @@ import androidx.compose.runtime.saveable.rememberSaveable
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
+import kotlinx.coroutines.flow.collectLatest
+import kotlinx.coroutines.flow.drop
+import androidx.compose.runtime.CompositionLocalProvider
+import androidx.compose.runtime.MutableState
+import androidx.compose.runtime.staticCompositionLocalOf
+import kotlinx.coroutines.delay
 import androidx.compose.ui.draw.clip
 import androidx.compose.ui.graphics.Brush
 import androidx.compose.ui.graphics.Color
@@ -107,6 +113,7 @@ import com.gbook.Nav
 import com.gbook.Route
 import com.gbook.data.Book
 import com.gbook.data.BookFormat
+import com.gbook.data.FINISHED
 import com.gbook.data.Highlight
 import com.gbook.ui.components.Avatar
 import com.gbook.ui.components.BookCover
@@ -146,7 +153,27 @@ fun HomeScreen(vm: AppViewModel, nav: Nav) {
     var collapsed by remember { mutableStateOf(false) }
     val picker = rememberLauncherForActivityResult(ActivityResultContracts.OpenMultipleDocuments()) { uris -> vm.importMany(uris) }
     val importBooks = { picker.launch(arrayOf("application/epub+zip", "application/pdf", "application/octet-stream")) }
+    // Tabs visited before this one, most recent last, so Back retraces them before leaving the app.
+    val history = remember { mutableStateListOf<Tab>() }
+    fun goTo(t: Tab) {
+        if (t == tab) return
+        history.remove(tab); history.remove(t); history.add(tab)
+        tab = t
+    }
+    // At the Library with nothing to go back to, a first Back only warns; a second one within two seconds leaves.
+    var exitArmed by remember { mutableStateOf(false) }
+    LaunchedEffect(exitArmed) { if (exitArmed) { delay(2000); exitArmed = false } }
+    // Composed before the tabs, so a settings sub-page's own Back handler still goes first.
+    BackHandler(!exitArmed) {
+        when {
+            history.isNotEmpty() -> { tab = history.removeAt(history.lastIndex); collapsed = false }
+            tab != Tab.Library -> { tab = Tab.Library; collapsed = false }
+            else -> { exitArmed = true; vm.toast("Press back again to leave GBook") }
+        }
+    }
 
+    val scrolling = remember { mutableStateOf(false) }
+    CompositionLocalProvider(LocalScrolling provides scrolling) {
     Box(Modifier.fillMaxSize().background(g.bg)) {
         Box(Modifier.fillMaxSize().hazeSource(haze)) {
             AnimatedContent(tab, label = "tab") { t ->
@@ -167,7 +194,7 @@ fun HomeScreen(vm: AppViewModel, nav: Nav) {
         Box(Modifier.fillMaxWidth().statusBarsPadding().padding(top = 6.dp, start = 16.dp, end = 16.dp), contentAlignment = Alignment.TopEnd) {
             if (tab == Tab.Library) Avatar(
                 vm.avatarFile, data.settings.avatarVersion, data.settings.profileName, 44.dp,
-                Modifier.align(Alignment.TopStart).clip(CircleShape).clickable { tab = Tab.Settings; settingsPage = "profile" },
+                Modifier.align(Alignment.TopStart).clip(CircleShape).clickable { goTo(Tab.Settings); settingsPage = "profile" },
             )
             when (tab) {
                 Tab.Library -> Row(horizontalArrangement = Arrangement.spacedBy(10.dp)) {
@@ -181,18 +208,19 @@ fun HomeScreen(vm: AppViewModel, nav: Nav) {
         val items = remember { Tab.entries.map { NavBarItem(it.label, it.icon, it.emoji) } }
         val onSelect = { i: Int ->
             if (Tab.entries[i] == Tab.Settings && tab == Tab.Settings) settingsPage = null
-            tab = Tab.entries[i]; collapsed = false
+            goTo(Tab.entries[i]); collapsed = false
         }
         val emoji = data.settings.navIcons == 1
         if (data.settings.navStyle == 1) {
             // Classic bar: Search is the last item, so it gets the separate round button.
-            ClassicNavBar(items, tab.ordinal, onSelect, collapsed, haze, emoji, Modifier.align(Alignment.BottomCenter))
+            ClassicNavBar(items, tab.ordinal, onSelect, collapsed, if (scrolling.value) null else haze, emoji, Modifier.align(Alignment.BottomCenter))
         } else {
             FloatingNavBar(
-                items.dropLast(1), if (tab == Tab.Search) -1 else tab.ordinal, onSelect, collapsed, haze, emoji, Modifier.align(Alignment.BottomCenter),
-                search = items.last(), onSearch = { tab = Tab.Search; collapsed = false },
+                items.dropLast(1), if (tab == Tab.Search) -1 else tab.ordinal, onSelect, collapsed, if (scrolling.value) null else haze, emoji, Modifier.align(Alignment.BottomCenter),
+                search = items.last(), onSearch = { goTo(Tab.Search); collapsed = false },
             )
         }
+    }
     }
     if (showThemes) ThemeSheet(vm, onDismiss = { showThemes = false })
     if (showGenerate) GeneratePostsSheet(vm, onDismiss = { showGenerate = false })
@@ -207,14 +235,36 @@ private fun LargeTitle(text: String, subtitle: String? = null) {
     }
 }
 
-/** Reports scroll direction so the tab bar can collapse. */
+/**
+ * True while a tab's list is moving. The bottom bar drops its backdrop blur meanwhile: blurring the page behind it
+ * on every frame cost the GPU more than a 120 Hz frame allows, which made scrolling hitch.
+ */
+val LocalScrolling = staticCompositionLocalOf<MutableState<Boolean>?> { null }
+
+/** Reports scroll direction so the tab bar can collapse, and whether the list is moving ([LocalScrolling]). */
 @Composable
-fun ScrollDirection(index: Int, offset: Int, onScrollDir: (Boolean) -> Unit) {
-    var last by remember { mutableIntStateOf(0) }
-    val pos = index * 10_000 + offset
-    androidx.compose.runtime.LaunchedEffect(pos) {
-        if (pos > last + 40) onScrollDir(true) else if (pos < last - 40 || pos == 0) onScrollDir(false)
-        last = pos
+fun ScrollDirection(position: () -> Int, onScrollDir: (Boolean) -> Unit) {
+    val report by androidx.compose.runtime.rememberUpdatedState(onScrollDir)
+    val scrolling = LocalScrolling.current
+    if (scrolling != null) {
+        androidx.compose.runtime.LaunchedEffect(scrolling) {
+            androidx.compose.runtime.snapshotFlow(position).drop(1).collectLatest {
+                scrolling.value = true
+                // Still for a moment: scrolling has stopped.
+                delay(200)
+                scrolling.value = false
+            }
+        }
+        androidx.compose.runtime.DisposableEffect(scrolling) { onDispose { scrolling.value = false } }
+    }
+    // Watched in a snapshot flow, not read during composition: reading the scroll offset there would recompose
+    // the whole screen on every scrolled frame, which is what made scrolling stutter.
+    androidx.compose.runtime.LaunchedEffect(Unit) {
+        var last = 0
+        androidx.compose.runtime.snapshotFlow(position).collect { pos ->
+            if (pos > last + 40) report(true) else if (pos < last - 40 || pos == 0) report(false)
+            last = pos
+        }
     }
 }
 
@@ -262,11 +312,11 @@ private fun LibraryTab(vm: AppViewModel, nav: Nav, onImport: () -> Unit, onScrol
     if (showActivity) ReadingActivitySheet(
         vm, onOpen = { b -> showActivity = false; vm.markOpened(b.id); nav.open(b) }, onDismiss = { showActivity = false },
     )
-    if (pickPlanBook) PlanBookSheet(vm, books.filter { b -> b.progress < 0.995f && plans.none { it.second.id == b.id } }, onDismiss = { pickPlanBook = false }) {
+    if (pickPlanBook) PlanBookSheet(vm, books.filter { b -> b.progress < FINISHED && plans.none { it.second.id == b.id } }, onDismiss = { pickPlanBook = false }) {
         pickPlanBook = false; planBook = it
     }
     planBook?.let { PlanSheet(vm, it, onDismiss = { planBook = null }) }
-    ScrollDirection(grid.firstVisibleItemIndex, grid.firstVisibleItemScrollOffset, onScrollDir)
+    ScrollDirection({ grid.firstVisibleItemIndex * 10_000 + grid.firstVisibleItemScrollOffset }, onScrollDir)
     LaunchedEffect(selecting) { if (selecting) onScrollDir(true) }
 
     val showBooks = view == LibraryView.Overview || view == LibraryView.Books
@@ -417,7 +467,7 @@ private fun LibraryTab(vm: AppViewModel, nav: Nav, onImport: () -> Unit, onScrol
                 }
                 Row(Modifier.fillMaxWidth().padding(top = 8.dp), verticalAlignment = Alignment.CenterVertically) {
                     val label = when {
-                        b.progress >= 0.995f -> "Finished"
+                        b.progress >= FINISHED -> "Finished"
                         b.progress > 0f -> "${(b.progress * 100).toInt().coerceAtLeast(1)}%"
                         else -> "NEW"
                     }

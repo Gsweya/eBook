@@ -15,8 +15,16 @@ android {
         applicationId = "com.gbook"
         minSdk = 26
         targetSdk = 36
-        versionCode = 9
-        versionName = "1.5.0"
+        versionCode = 10
+        versionName = "1.6.0"
+        manifestPlaceholders["appLabel"] = "GBook"
+        // -Pdev installs as a separate "GBook Dev" app next to the Play Store one, for testing on a phone
+        // whose GBook is signed with a different key. Google sign-in isn't registered for it.
+        if (project.hasProperty("dev")) {
+            applicationIdSuffix = ".dev"
+            versionNameSuffix = "-dev"
+            manifestPlaceholders["appLabel"] = "GBook Dev"
+        }
     }
     // Release signing reads a local, git-ignored keystore.properties (storeFile, storePassword, keyAlias, keyPassword).
     val keystoreProps = rootProject.file("keystore.properties").takeIf { it.exists() }?.let { f ->
@@ -33,7 +41,8 @@ android {
     buildTypes {
         release {
             isMinifyEnabled = false
-            signingConfig = signingConfigs.findByName("release")
+            // A -Pdev release build is for measuring on a phone, so it's signed like the debug one.
+            signingConfig = if (project.hasProperty("dev")) signingConfigs.getByName("debug") else signingConfigs.findByName("release")
         }
     }
     compileOptions {
@@ -44,6 +53,8 @@ android {
     // Local sample books (git-ignored) are bundled into debug builds only, never into release APKs.
     // Pass -PnoSamples for a debug build without them (e.g. for public screenshots).
     if (!project.hasProperty("noSamples")) sourceSets["debug"].assets.srcDir("../../sample_books")
+    // -Pdev release builds (never published: they install as com.gbook.dev) carry them too, for testing.
+    if (project.hasProperty("dev") && !project.hasProperty("noSamples")) sourceSets["release"].assets.srcDir("../../sample_books")
     packaging { resources { excludes += "/META-INF/{AL2.0,LGPL2.1}" } }
 }
 
@@ -61,6 +72,7 @@ dependencies {
     implementation("androidx.lifecycle:lifecycle-runtime-compose:2.9.4")
     implementation("androidx.navigation:navigation-compose:2.9.5")
     implementation("androidx.core:core-ktx:1.17.0")
+    implementation("androidx.core:core-splashscreen:1.0.1")
     implementation("org.jetbrains.kotlinx:kotlinx-serialization-json:1.9.0")
     implementation("org.jetbrains.kotlinx:kotlinx-coroutines-android:1.10.2")
     implementation("dev.chrisbanes.haze:haze:1.6.10")

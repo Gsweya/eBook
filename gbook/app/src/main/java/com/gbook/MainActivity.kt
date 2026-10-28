@@ -3,6 +3,8 @@ package com.gbook
 import android.content.Intent
 import android.net.Uri
 import android.os.Bundle
+import android.os.SystemClock
+import android.view.animation.AccelerateInterpolator
 import androidx.activity.ComponentActivity
 import androidx.activity.compose.BackHandler
 import androidx.activity.compose.setContent
@@ -43,6 +45,7 @@ import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
+import androidx.core.splashscreen.SplashScreen.Companion.installSplashScreen
 import com.gbook.data.Book
 import com.gbook.data.BookFormat
 import com.gbook.ui.components.panel
@@ -80,6 +83,14 @@ class MainActivity : ComponentActivity() {
     private val pendingBook = MutableStateFlow<String?>(null)
 
     override fun onCreate(savedInstanceState: Bundle?) {
+        installSplashScreen().setOnExitAnimationListener { splash ->
+            // Let the book finish opening (it's short), then lift the icon a little as the splash fades away.
+            val left = (splash.iconAnimationStartMillis + splash.iconAnimationDurationMillis - SystemClock.uptimeMillis()).coerceIn(0, 500)
+            splash.iconView.animate().setStartDelay(left).setDuration(260).scaleX(1.12f).scaleY(1.12f).alpha(0f)
+                .setInterpolator(AccelerateInterpolator()).start()
+            splash.view.animate().setStartDelay(left + 60).setDuration(260).alpha(0f)
+                .withEndAction { splash.remove() }.start()
+        }
         enableEdgeToEdge()
         super.onCreate(savedInstanceState)
         if (savedInstanceState == null) handleIntent(intent)

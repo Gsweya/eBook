@@ -13,6 +13,8 @@ information when you use it.
 
 GBook has no server and no account of its own. It doesn't collect analytics, show ads, or send your data to
 anyone. Your books and reading data stay on your devices and, if you turn on sync, in your own Google Drive.
+If you choose to look words up online, the words you look up are sent to a dictionary service (see
+[Dictionary](#dictionary)).
 
 ## Data on your device
 
@@ -39,6 +41,18 @@ GBook's use and transfer of information received from Google APIs adheres to the
 [Google API Services User Data Policy](https://developers.google.com/terms/api-services-user-data-policy),
 including the Limited Use requirements. GBook does not use this information for advertising, does not sell
 it, and does not transfer it to anyone.
+
+## Dictionary
+
+Looking a word up is optional, and the first time you do it GBook asks how:
+
+- **Download the dictionary:** GBook downloads Princeton's WordNet once from the npm package registry
+  (registry.npmjs.org) and looks words up on your device from then on. Nothing you look up leaves your device.
+- **Look words up online:** each word you look up is sent to the
+  [Free Dictionary API](https://dictionaryapi.dev) to get its definition. Only the word is sent, with no account
+  or other information from GBook.
+
+You can switch between them, or remove the downloaded dictionary, in Settings › Reading.
 
 ## Removing your data
 

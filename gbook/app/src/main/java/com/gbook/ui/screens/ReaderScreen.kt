@@ -259,7 +259,7 @@ private class Glyphs(private val measurer: TextMeasurer, style: TextStyle) {
 private val HandleBlue = Color(0xFF3A7BF2)
 
 const val MIN_FONT = 12f
-const val MAX_FONT = 40f
+const val MAX_FONT = 72f
 
 @OptIn(FlowPreview::class)
 @Composable
@@ -399,13 +399,12 @@ private fun ReaderContent(
     TrackReadingTime(vm, book.id, Triple(chapter, scrollActivity, chrome))
 
 
-    fun changeFont(delta: Float) {
-        val n = (s.fontSize + delta).coerceIn(MIN_FONT, MAX_FONT)
-        if (n != s.fontSize) {
-            haptics.tap()
-            vm.updateSettings { it.copy(fontSize = n) }
-            sizeHud++
-        }
+    // The pinch handler is set up once and outlives this composition's s, so it reads the size through this.
+    val fontSize by rememberUpdatedState(s.fontSize)
+    fun resizeFont(size: Float) {
+        haptics.tap()
+        vm.updateSettings { it.copy(fontSize = size) }
+        sizeHud++
     }
 
     val family = readingFont(s.font).family
@@ -771,7 +770,7 @@ private fun ReaderContent(
             Modifier.fillMaxSize()
                 // Keep a display list of the page so the loupe can redraw it magnified.
                 .drawWithContent { pageLayer.record { this@drawWithContent.drawContent() }; drawLayer(pageLayer) }
-                .pointerInput(Unit) { pinchToResize { changeFont(it) } }
+                .pointerInput(Unit) { pinchToResize({ fontSize }, ::resizeFont) }
                 .graphicsLayer { val v = turnAnim.value; alpha = 1f - kotlin.math.abs(v); translationX = -v * 28.dp.toPx() }
         ) {
             LazyColumn(
@@ -1219,15 +1218,21 @@ private fun SelectionHandle(
     )
 }
 
-/** Two-finger pinch steps the font size; consumes events so the list doesn't scroll meanwhile. */
-private suspend fun PointerInputScope.pinchToResize(onStep: (Float) -> Unit) = awaitEachGesture {
+/**
+ * Two-finger pinch scales the font size with the fingers, in whole points: spreading them twice as far doubles
+ * it. Consumes events so the list doesn't scroll meanwhile.
+ */
+private suspend fun PointerInputScope.pinchToResize(size: () -> Float, onResize: (Float) -> Unit) = awaitEachGesture {
     awaitFirstDown(requireUnconsumed = false, pass = PointerEventPass.Initial)
-    var acc = 1f
+    var shown = size()
+    var exact = shown
     do {
         val ev = awaitPointerEvent(PointerEventPass.Initial)
         if (ev.changes.count { it.pressed } >= 2) {
-            acc *= ev.calculateZoom()
-            if (acc > 1.10f) { onStep(1f); acc = 1f } else if (acc < 0.91f) { onStep(-1f); acc = 1f }
+            // Stops at the limits, so pinching back from one responds straight away.
+            exact = (exact * ev.calculateZoom()).coerceIn(MIN_FONT, MAX_FONT)
+            val whole = exact.roundToInt().toFloat()
+            if (whole != shown) { shown = whole; onResize(whole) }
             ev.changes.forEach { it.consume() }
         }
     } while (ev.changes.any { it.pressed })
@@ -1800,7 +1805,7 @@ fun ReaderOptionsSheet(
                 OptionTile(Icons.Rounded.IosShare, "Share", null, onShare, Modifier.weight(1f))
             }
             Text("PAGE & THEME", style = GType.eyebrow, color = g.text2, modifier = Modifier.padding(top = 22.dp, bottom = 10.dp))
-            SettingSlider(Icons.Rounded.LightMode, brightness, 0.02f..1f) { v ->
+            SettingSlider(Icons.Rounded.LightMode, brightness, 0.02f..1f, label = "Brightness") { v ->
                 brightness = v
                 activity?.window?.let { w -> w.attributes = w.attributes.apply { screenBrightness = v } }
             }
@@ -1908,27 +1913,43 @@ fun FontPicker(selected: String, onPick: (String) -> Unit) {
     }
 }
 
+/**
+ * A setting's name and value, which opens on a tap to show its slider. Sliders stay closed until then because
+ * they take any touch, so a scroll through a sheet starting on one would change the setting.
+ */
+@Composable
+private fun SliderRow(
+    icon: androidx.compose.ui.graphics.vector.ImageVector,
+    label: String,
+    valueText: String?,
+    slider: @Composable () -> Unit,
+) {
+    val g = LocalG.current
+    var open by rememberSaveable { mutableStateOf(false) }
+    val arrow by animateFloatAsState(if (open) 180f else 0f, label = "arrow")
+    Column(Modifier.padding(top = 12.dp).fillMaxWidth().clip(RoundedCornerShape(22.dp)).background(g.surface).animateContentSize()) {
+        Row(
+            Modifier.fillMaxWidth().clickable { open = !open }.padding(horizontal = 18.dp, vertical = 14.dp),
+            verticalAlignment = Alignment.CenterVertically,
+        ) {
+            Icon(icon, null, tint = g.text2, modifier = Modifier.size(22.dp))
+            Text(label, fontSize = 17.sp, color = g.text, modifier = Modifier.padding(start = 14.dp).weight(1f))
+            if (valueText != null) Text(valueText, fontSize = 17.sp, color = g.text2)
+            Icon(Icons.Rounded.KeyboardArrowDown, null, tint = g.text2, modifier = Modifier.padding(start = 4.dp).rotate(arrow))
+        }
+        if (open) Box(Modifier.padding(start = 18.dp, end = 18.dp, bottom = 10.dp)) { slider() }
+    }
+}
+
 @Composable
 private fun SettingSlider(
     icon: androidx.compose.ui.graphics.vector.ImageVector,
     value: Float,
     range: ClosedFloatingPointRange<Float>,
-    label: String? = null,
+    label: String,
     valueText: String? = null,
     onChange: (Float) -> Unit,
-) {
-    val g = LocalG.current
-    Column(Modifier.fillMaxWidth().padding(top = 10.dp)) {
-        if (label != null) Row(Modifier.fillMaxWidth().padding(start = 34.dp), verticalAlignment = Alignment.CenterVertically) {
-            Text(label, fontSize = 15.sp, color = g.text2, modifier = Modifier.weight(1f))
-            if (valueText != null) Text(valueText, fontSize = 15.sp, color = g.text2)
-        }
-        Row(Modifier.fillMaxWidth(), verticalAlignment = Alignment.CenterVertically) {
-            Icon(icon, null, tint = g.text2, modifier = Modifier.size(22.dp))
-            GSlider(value, range, onChange, Modifier.weight(1f).padding(start = 12.dp))
-        }
-    }
-}
+) = SliderRow(icon, label, valueText) { GSlider(value, range, onChange, Modifier.fillMaxWidth()) }
 
 const val MIN_MARGIN = 0
 const val MAX_MARGIN = 80
@@ -1937,16 +1958,9 @@ const val MAX_MARGIN = 80
 @Composable
 fun MarginControl(margin: Int, onChange: (Int) -> Unit) {
     val g = LocalG.current
-    Column(Modifier.fillMaxWidth().padding(top = 10.dp)) {
-        Row(Modifier.fillMaxWidth().padding(start = 34.dp), verticalAlignment = Alignment.CenterVertically) {
-            Text("Margins", fontSize = 15.sp, color = g.text2, modifier = Modifier.weight(1f))
-            Text("$margin", fontSize = 15.sp, color = g.text2)
-        }
-        Row(Modifier.fillMaxWidth(), verticalAlignment = Alignment.CenterVertically) {
-            Icon(Icons.Rounded.FormatIndentIncrease, null, tint = g.text2, modifier = Modifier.size(22.dp))
-            GSlider(margin.toFloat(), MIN_MARGIN.toFloat()..MAX_MARGIN.toFloat(), { onChange(it.roundToInt()) }, Modifier.weight(1f).padding(start = 12.dp))
-        }
-        Row(Modifier.fillMaxWidth().padding(start = 34.dp, top = 2.dp), horizontalArrangement = Arrangement.spacedBy(8.dp)) {
+    SliderRow(Icons.Rounded.FormatIndentIncrease, "Margins", "$margin") { Column {
+        GSlider(margin.toFloat(), MIN_MARGIN.toFloat()..MAX_MARGIN.toFloat(), { onChange(it.roundToInt()) }, Modifier.fillMaxWidth())
+        Row(Modifier.fillMaxWidth().padding(top = 2.dp, bottom = 4.dp), horizontalArrangement = Arrangement.spacedBy(8.dp)) {
             listOf("Narrow" to 8, "Normal" to 24, "Wide" to 44, "Extra wide" to 64).forEach { (name, v) ->
                 val on = margin == v
                 Text(
@@ -1956,7 +1970,7 @@ fun MarginControl(margin: Int, onChange: (Int) -> Unit) {
                 )
             }
         }
-    }
+    } }
 }
 
 /** Scroll through the whole chapter, or turn one page at a time. */

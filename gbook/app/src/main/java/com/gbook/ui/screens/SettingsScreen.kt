@@ -1,11 +1,12 @@
 package com.gbook.ui.screens
 
-import android.app.Activity
+import android.util.Log
 import androidx.activity.result.IntentSenderRequest
 import androidx.compose.material.icons.automirrored.rounded.Logout
 import androidx.compose.material.icons.rounded.Sync
 import androidx.compose.runtime.rememberCoroutineScope
 import com.google.android.gms.common.api.ApiException
+import com.google.android.gms.common.api.CommonStatusCodes
 import kotlinx.coroutines.launch
 import com.gbook.ui.components.plural
 import com.gbook.ui.components.bottomBarClearance
@@ -438,10 +439,8 @@ private fun ReadingPage(vm: AppViewModel) {
     Column(Modifier.padding(horizontal = 16.dp)) {
         PageModeControl(s.pageMode) { m -> vm.updateSettings { it.copy(pageMode = m) } }
     }
-    SettingsCard {
-        Box(Modifier.padding(start = 6.dp, end = 20.dp, bottom = 12.dp)) {
-            MarginControl(s.margin) { m -> vm.updateSettings { it.copy(margin = m) } }
-        }
+    Column(Modifier.padding(horizontal = 16.dp)) {
+        MarginControl(s.margin) { m -> vm.updateSettings { it.copy(margin = m) } }
     }
     SettingsCard { TrackerOptions(s, vm) }
     SectionLabel("Highlights")
@@ -620,11 +619,15 @@ private fun SyncSection(vm: AppViewModel) {
     var signingIn by remember { mutableStateOf(false) }
     val failed = { e: Throwable ->
         signingIn = false
-        // Status 10 (DEVELOPER_ERROR): this build's package and signing key aren't registered in the Google Cloud project.
-        vm.toast(if ((e as? ApiException)?.statusCode == 10) "This build of GBook isn't registered with Google yet" else "Couldn't sign in: ${e.message ?: "unknown error"}")
+        val status = (e as? ApiException)?.statusCode
+        if (status != CommonStatusCodes.CANCELED) {
+            Log.w("GBook", "sign-in failed: status=$status", e)
+            // 8 (UNREGISTERED_ON_API_CONSOLE) or 10 (DEVELOPER_ERROR): this build's package and signing key aren't in the Google Cloud project.
+            vm.toast(if (status == 8 || status == 10) "This build of GBook isn't registered with Google yet" else "Couldn't sign in: ${e.message ?: "unknown error"}")
+        }
     }
+    // Pressing back and a refused sign-in both end with RESULT_CANCELED; only the status in the result tells them apart.
     val consent = rememberLauncherForActivityResult(ActivityResultContracts.StartIntentSenderForResult()) { r ->
-        if (r.resultCode != Activity.RESULT_OK) { signingIn = false; return@rememberLauncherForActivityResult }
         scope.launch { runCatching { vm.drive.finishSignIn(r.data) }.onFailure(failed); signingIn = false }
     }
     SectionLabel("Sync")

@@ -28,6 +28,9 @@ for (`drive.appdata` and `email`) are non-sensitive, so Google doesn't need to r
      each key: the release key (`keytool -list -v -keystore <your keystore> -alias <alias>`) and, for
      testing, the debug key (`keytool -list -v -keystore ~/.android/debug.keystore -alias androiddebugkey
      -storepass android`). No ID goes into the Android code; Play services matches the app by package and key.
+     Google Play re-signs the app, so the Play install needs a client for each certificate
+     `apksigner verify --print-certs` lists for it, which on Android 17 can be more than the app-signing key.
+     `-Pdev` builds are package `com.gbook.dev`, so they need their own client with the debug key.
    - **Desktop app:** this gives a client ID and a client secret. For an installed app Google doesn't treat the
      secret as confidential; it ships inside the binary.
 5. Build the desktop app with them:

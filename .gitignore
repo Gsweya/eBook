@@ -3,6 +3,7 @@ refs/
 /Apple Books ios Nov 2025/
 sample_books/
 *.zip
+exp_video/
 *.epub
 *.pdf
 # ...except the author's own starter book, which ships with the app

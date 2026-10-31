@@ -1,0 +1,262 @@
+WEBVTT
+
+00:02.600 --> 00:06.900
+So I've been working on this application called GBook.
+
+00:07.300 --> 00:09.400
+I've been using Claude to make it.
+
+00:10.200 --> 00:13.600
+And so if you go to my GitHub page and open the releases,
+
+00:13.800 --> 00:16.300
+you can see some release details over there.
+
+00:16.600 --> 00:21.100
+I have it available for Linux, Windows, as well as for Android.
+
+00:21.300 --> 00:23.600
+You can download the APK here,
+
+00:24.000 --> 00:28.800
+and you can join the test list for the Play Store.
+
+00:28.900 --> 00:31.900
+It's not public yet. You can only join in as a tester.
+
+00:32.200 --> 00:35.000
+And you can send me your email if you want to check it out.
+
+00:35.400 --> 00:38.000
+So basically, this is how the application looks like.
+
+00:38.300 --> 00:40.200
+The reason why I made this application is
+
+00:40.300 --> 00:45.400
+because I've been struggling to find a good ebook reader.
+
+00:46.000 --> 00:49.000
+And one of my biggest challenges and problems
+
+00:49.000 --> 00:53.000
+has been around how applications have been parsing PDFs.
+
+00:53.800 --> 00:57.700
+So for instance, in most applications, if you open a PDF,
+
+00:57.900 --> 01:00.900
+for instance, this book over here, The Bitcoin Standard.
+
+01:01.200 --> 01:06.100
+If I open it as a PDF, this is how it looks like on most books.
+
+01:06.300 --> 01:08.800
+Now, this is hard to read and even to keep track,
+
+01:08.900 --> 01:13.300
+even trying to highlight stuff or trying to zoom into the text.
+
+01:13.500 --> 01:17.900
+And so with this application, you can just press here, Reflow.
+
+01:18.900 --> 01:23.900
+And there it comes, just like how ebooks are being parsed.
+
+01:24.400 --> 01:28.700
+You can even highlight easily, select the text that you want to highlight.
+
+01:31.100 --> 01:39.000
+And so, apart from this, one of the other reasons why
+
+01:43.300 --> 01:48.600
+I like this new application that I'm using right now to read the books that I'm reading
+
+01:49.100 --> 01:51.900
+is this reading tracker.
+
+01:52.100 --> 01:55.300
+So for instance, whenever I'm reading, sometimes you get lost
+
+01:55.300 --> 01:58.000
+and forget maybe where you were reading,
+
+01:58.000 --> 02:00.800
+or struggle to focus on the specific line that you're reading.
+
+02:01.100 --> 02:03.700
+So this reading tracker over here, you can enable it over here,
+
+02:03.700 --> 02:05.800
+and you can set it to be at the middle or at the bottom.
+
+02:06.000 --> 02:09.900
+The reason for having it at the bottom is, for instance, if you have a very large screen,
+
+02:10.100 --> 02:12.700
+even if you prefer, it depends on where your thumb is,
+
+02:12.800 --> 02:15.500
+where you prefer to have your thumb when you're using your phone.
+
+02:15.700 --> 02:18.400
+So for instance, it can become very, very easy
+
+02:18.600 --> 02:22.700
+to just read through and track where you're reading.
+
+02:22.900 --> 02:25.900
+So you just scroll like that, from the top to the bottom,
+
+02:26.200 --> 02:29.400
+and keep on moving this highlighter.
+
+02:29.600 --> 02:30.900
+And you can even change this as well.
+
+02:31.200 --> 02:34.700
+So for instance, if I just come over here and use, like, green,
+
+02:34.900 --> 02:39.300
+if I come back over here, now we're using green to highlight what I'm reading.
+
+02:39.500 --> 02:43.500
+So yeah, this is one of the features I like about it.
+
+02:43.600 --> 02:46.000
+And also, you can even track goals.
+
+02:46.100 --> 02:50.800
+So for instance, let's say I'm reading this book over here,
+
+02:51.100 --> 02:54.500
+A Culture of Growth, here.
+
+02:58.500 --> 03:01.300
+So for instance, over here I can see,
+
+03:01.500 --> 03:04.900
+I personally use a 30-minute-a-day reading goal.
+
+03:05.200 --> 03:08.600
+So I can even see how many minutes are left to complete that goal.
+
+03:08.800 --> 03:10.300
+And if I'm done, I'm done.
+
+03:10.500 --> 03:12.200
+And here I can just see all my reading activities
+
+03:12.400 --> 03:15.600
+of the books that I've been reading, for 30 days, for seven days.
+
+03:16.000 --> 03:17.700
+I can even create a plan for reading a book.
+
+03:17.800 --> 03:24.400
+Let's say I want to read this book maybe for...
+
+03:25.000 --> 03:27.900
+I can put, like, 30 minutes.
+
+03:28.100 --> 03:31.200
+I can even add here a reminder of what time I want to be reading.
+
+03:31.600 --> 03:35.000
+I can even set, for instance, a goal for...
+
+03:35.300 --> 03:43.200
+I can set a goal for how long I want to read that book for.
+
+03:43.800 --> 03:46.300
+So for instance, I can open it over here
+
+03:46.500 --> 03:48.300
+and I can say, add a reading plan.
+
+03:49.000 --> 03:53.600
+And I can say that I want to read this book maybe within three months, or within a year.
+
+03:54.200 --> 03:56.800
+So for instance, this book is very, very long.
+
+03:57.000 --> 03:58.600
+So it would take a very long time to complete.
+
+03:58.800 --> 04:00.200
+It has almost a thousand pages.
+
+04:00.800 --> 04:04.900
+So I can just pick how long I want to read this book for.
+
+04:05.100 --> 04:07.200
+And then I can just keep track of it.
+
+04:07.500 --> 04:10.900
+And even the app will be reminding you that you have to keep on reading this book.
+
+04:11.000 --> 04:16.000
+And so you can even import your books just from Google Drive easily.
+
+04:16.500 --> 04:20.000
+And we're also still working on having this Google Drive backup,
+
+04:20.400 --> 04:24.900
+so you can be able to read between your desktop application
+
+04:25.400 --> 04:27.300
+at the same time, like, reading on your phone.
+
+04:27.300 --> 04:29.200
+You just proceed from where you left off.
+
+04:29.400 --> 04:30.900
+So we're still working on that.
+
+04:31.100 --> 04:33.900
+And another feature that I like about this application is the feed section.
+
+04:34.300 --> 04:36.700
+So for instance, the highlights that I make for my book,
+
+04:36.800 --> 04:39.100
+or even just posting directly what I've highlighted,
+
+04:39.400 --> 04:44.400
+I can make these cool posters that I can just be reading through.
+
+04:44.500 --> 04:47.000
+Let's say, for instance, that you're in the class
+
+04:47.200 --> 04:50.200
+and you don't want to read the whole book,
+
+04:50.200 --> 04:52.700
+but you just want to do a recap to see what you've been reading about the book,
+
+04:52.800 --> 04:57.400
+and try to pull out the core concepts that you would like to remember about the book.
+
+04:57.600 --> 05:01.400
+So I can just open this feed section and read through it.
+
+05:01.900 --> 05:07.900
+Yeah, so you can check me if you want to get access to the application,
+
+05:08.300 --> 05:11.000
+or if you think there's some changes that you can make
+
+05:11.100 --> 05:16.600
+to make it even better than what it looks like right now,
+
+05:16.800 --> 05:17.700
+you can just tell me.
+
+05:17.800 --> 05:19.100
+And it's even open source.
+
+05:19.200 --> 05:24.000
+You can even clone it and do whatever you want to do with the application.
+
+05:36.500 --> 05:41.300
+Made with ❤️ · props to Ame

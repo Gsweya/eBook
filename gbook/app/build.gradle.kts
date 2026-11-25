@@ -15,8 +15,8 @@ android {
         applicationId = "com.gbook"
         minSdk = 26
         targetSdk = 36
-        versionCode = 15
-        versionName = "1.8.0"
+        versionCode = 16
+        versionName = "1.8.1"
         manifestPlaceholders["appLabel"] = "GBook"
         // -Pdev installs as a separate "GBook Dev" app next to the Play Store one, for testing on a phone
         // whose GBook is signed with a different key. Google sign-in needs its own client (see docs/sync.md).

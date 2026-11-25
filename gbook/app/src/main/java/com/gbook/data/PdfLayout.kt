@@ -3,7 +3,10 @@ package com.gbook.data
 import android.graphics.Bitmap
 import com.tom_roush.pdfbox.contentstream.operator.Operator
 import com.tom_roush.pdfbox.cos.COSBase
+import com.tom_roush.pdfbox.cos.COSDictionary
 import com.tom_roush.pdfbox.cos.COSName
+import com.tom_roush.pdfbox.cos.COSObject
+import com.tom_roush.pdfbox.pdmodel.PDDocument
 import com.tom_roush.pdfbox.pdmodel.PDPage
 import com.tom_roush.pdfbox.pdmodel.graphics.image.PDImageXObject
 import com.tom_roush.pdfbox.text.PDFTextStripper
@@ -29,42 +32,64 @@ internal class PdfLine(val page: Int, val words: List<PdfWord>) {
 }
 
 /**
- * An image drawn on [page], saved as [file] in the book's images folder. [top] grows downwards like a word's
- * baseline, so images and text sort into one reading order. [key] identifies the image data, which a PDF can
- * draw on many pages.
+ * An image drawn on [page]. [top] grows downwards like a word's baseline, so images and text sort into one reading
+ * order. [key] identifies the image data, which a PDF can draw on many pages, and is the same in every copy of the
+ * document that's open. [file] is set once the image has been decoded and saved in the book's images folder.
  */
-internal class PdfImage(val page: Int, val top: Float, val file: String, val key: Any, val fullPage: Boolean)
+internal class PdfImage(val page: Int, val top: Float, val key: Any, val fullPage: Boolean, var file: String = "")
 
 /**
- * Collects every word of a document with its position, size and weight, and, given an [imagesDir], the images
- * drawn among the text.
+ * Collects every word of a range of pages with its position, size and weight, and, if [images] is set, notes the
+ * images drawn among the text. Images are only decoded later, by [save], for the ones worth keeping.
  */
-internal class WordCollector(private val imagesDir: File? = null, private val onPageDone: (Int) -> Unit) : PDFTextStripper() {
-    private val words = ArrayList<PdfWord>()
-    private val drawn = ArrayList<PdfImage>()
-    /** Saved file for each image already decoded, so one drawn on many pages is decoded once. */
-    private val saved = HashMap<Any, String>()
-    val pageHeights = ArrayList<Float>()
+internal class WordCollector(private val images: Boolean, private val onPageDone: () -> Unit) : PDFTextStripper() {
+    val words = ArrayList<PdfWord>()
+    val drawn = ArrayList<PdfImage>()
+    /** The image behind each key in [drawn], for decoding the ones kept. */
+    private val objects = HashMap<Any, PDImageXObject>()
+    /** Pages whose text couldn't be read at all. */
+    var failedPages = 0
+        private set
 
     init { sortByPosition = true }
 
-    override fun startPage(page: PDPage) {
-        pageHeights += page.mediaBox.height
-        super.startPage(page)
+    /** Collects pages [from] to [to] of [doc], counting from 1. */
+    fun collect(doc: PDDocument, from: Int, to: Int) {
+        setStartPage(from)
+        setEndPage(to)
+        getText(doc)
     }
 
-    override fun endPage(page: PDPage) {
-        super.endPage(page)
-        onPageDone(currentPageNo)
+    override fun processPage(page: PDPage) {
+        if (currentPageNo !in getStartPage()..getEndPage()) return super.processPage(page)
+        val w = words.size
+        val d = drawn.size
+        try {
+            super.processPage(page)
+        } catch (e: Exception) {
+            // One broken page shouldn't cost the rest of the book. Drop what it added and try once more without
+            // sorting by position, which is what fails on some malformed pages.
+            words.subList(w, words.size).clear(); drawn.subList(d, drawn.size).clear()
+            val sorted = sortByPosition
+            try {
+                sortByPosition = false
+                super.processPage(page)
+            } catch (e2: Exception) {
+                words.subList(w, words.size).clear(); drawn.subList(d, drawn.size).clear()
+                failedPages++
+            } finally {
+                sortByPosition = sorted
+            }
+        }
+        onPageDone()
     }
 
     override fun processOperator(operator: Operator, operands: MutableList<COSBase>) {
-        val dir = imagesDir
-        if (dir != null && operator.name == "Do") (operands.firstOrNull() as? COSName)?.let { runCatching { noteImage(it, dir) } }
+        if (images && operator.name == "Do") (operands.firstOrNull() as? COSName)?.let { runCatching { noteImage(it) } }
         super.processOperator(operator, operands)
     }
 
-    private fun noteImage(name: COSName, dir: File) {
+    private fun noteImage(name: COSName) {
         val res = resources ?: return
         if (!res.isImageXObject(name)) return
         val img = res.getXObject(name) as? PDImageXObject ?: return
@@ -76,10 +101,25 @@ internal class WordCollector(private val imagesDir: File? = null, private val on
         val h = corners.maxOf { it.y } - corners.minOf { it.y }
         // Bullets, rules, icons and other ornaments.
         if (w < 40f || h < 40f || img.width < 32 || img.height < 32) return
-        val key = img.cosObject
-        val file = saved[key] ?: save(img, dir, "pdf-${saved.size}")?.also { saved[key] = it } ?: return
+        // The object number names the image the same way in every copy of the document, unlike the object itself.
+        val ref = (res.cosObject.getDictionaryObject(COSName.XOBJECT) as? COSDictionary)?.getItem(name) as? COSObject
+        val key: Any = ref?.let { it.objectNumber to it.generationNumber } ?: img.cosObject
+        objects.putIfAbsent(key, img)
         val top = box.upperRightY - corners.maxOf { it.y }
-        drawn += PdfImage(currentPageNo - 1, top, file, key, fullPage = w >= box.width * 0.9f && h >= box.height * 0.9f)
+        drawn += PdfImage(currentPageNo - 1, top, key, fullPage = w >= box.width * 0.9f && h >= box.height * 0.9f)
+    }
+
+    /**
+     * Decodes and saves the images this collector saw whose key is in [names] and that no other collector has
+     * claimed in [saved] yet, recording each file name there (or "" if it couldn't be decoded).
+     */
+    fun save(names: Map<Any, String>, saved: java.util.concurrent.ConcurrentHashMap<Any, String>, dir: File, onSaved: () -> Unit) {
+        for ((key, img) in objects) {
+            val base = names[key] ?: continue
+            if (saved.putIfAbsent(key, "") != null) continue
+            saved[key] = runCatching { save(img, dir, base) }.getOrNull().orEmpty()
+            onSaved()
+        }
     }
 
     /** Decodes [img] at up to 1600px on its long side and saves it, as PNG if it has transparency. */
@@ -91,19 +131,6 @@ internal class WordCollector(private val imagesDir: File? = null, private val on
         File(dir, name).outputStream().use { bmp.compress(if (png) Bitmap.CompressFormat.PNG else Bitmap.CompressFormat.JPEG, 88, it) }
         bmp.recycle()
         return name
-    }
-
-    /**
-     * The images worth reading: not logos or backgrounds repeated on three or more pages, and not a full-page
-     * picture behind text (a scanned page with a text layer). Files of the rest are deleted.
-     */
-    fun images(): List<PdfImage> {
-        val pagesPerImage = drawn.groupBy { it.key }.mapValues { (_, l) -> l.map { it.page }.distinct().size }
-        val textPages = words.map { it.page }.toSet()
-        val (keep, drop) = drawn.partition { (pagesPerImage[it.key] ?: 0) < 3 && !(it.fullPage && it.page in textPages) }
-        val kept = keep.map { it.file }.toSet()
-        imagesDir?.let { dir -> drop.map { it.file }.filter { it !in kept }.distinct().forEach { File(dir, it).delete() } }
-        return keep.distinctBy { it.page to it.file }
     }
 
     override fun writeString(text: String, positions: MutableList<TextPosition>) {
@@ -126,54 +153,64 @@ internal class WordCollector(private val imagesDir: File? = null, private val on
         return PdfWord(page, ligatures(ps.joinToString("") { it.unicode }), first.xDirAdj, last.xDirAdj + last.widthDirAdj, first.yDirAdj, size, bold)
     }
 
-    fun lines(): List<PdfLine> {
-        val out = ArrayList<PdfLine>()
-        var cur = ArrayList<PdfWord>()
-        for (w in words) {
-            val prev = cur.lastOrNull()
-            val sameLine = prev != null && prev.page == w.page && abs(prev.y - w.y) < 0.5f * maxOf(prev.size, w.size) && w.x0 >= prev.x0
-            if (!sameLine && cur.isNotEmpty()) { out += PdfLine(cur[0].page, cur); cur = ArrayList() }
-            cur += w
-        }
-        if (cur.isNotEmpty()) out += PdfLine(cur[0].page, cur)
-        return attachSuperscripts(out)
-    }
-
-    /**
-     * Folds superscripts (ordinals like the "rd" of 33rd, footnote marks) into the line they're raised above.
-     * Set smaller and higher, they otherwise come out as a line of their own, which then breaks the paragraph.
-     */
-    private fun attachSuperscripts(lines: List<PdfLine>): List<PdfLine> {
-        val out = lines.toMutableList()
-        val gone = HashSet<Int>()
-        for ((i, sup) in lines.withIndex()) {
-            if (sup.words.size > 4 || sup.words.any { it.text.length > 4 }) continue
-            val host = (maxOf(0, i - 2)..minOf(lines.lastIndex, i + 2)).firstOrNull { j ->
-                val h = lines[j]
-                j != i && j !in gone && h.page == sup.page && h.words.size > sup.words.size && sup.size < h.size * 0.85f &&
-                    h.y - sup.y > 0 && h.y - sup.y < h.size * 0.75f && sup.x0 >= h.x0 - 1f && sup.x1 <= h.x1 + h.size
-            } ?: continue
-            out[host] = PdfLine(sup.page, out[host].words.withSuperscripts(sup.words))
-            gone += i
-        }
-        return out.filterIndexed { i, _ -> i !in gone }
-    }
-
-    /** These words with [sups] glued onto the words they follow (or placed after them if there's a gap). */
-    private fun List<PdfWord>.withSuperscripts(sups: List<PdfWord>): List<PdfWord> {
-        val ws = toMutableList()
-        for (s in sups) {
-            val k = ws.indexOfLast { it.x1 <= s.x0 + 0.5f }
-            if (k < 0) { ws.add(0, s); continue }
-            val w = ws[k]
-            if (s.x0 - w.x1 < w.size * 0.3f) ws[k] = PdfWord(w.page, w.text + s.text, w.x0, s.x1, w.y, w.size, w.bold)
-            else ws.add(k + 1, s)
-        }
-        return ws
-    }
-
     private fun ligatures(s: String) = s
         .replace("ﬀ", "ff").replace("ﬁ", "fi").replace("ﬂ", "fl").replace("ﬃ", "ffi").replace("ﬄ", "ffl").replace("ﬅ", "st").replace("ﬆ", "st")
+}
+
+/**
+ * The images worth reading among [drawn]: not logos or backgrounds repeated on three or more pages, and not a
+ * full-page picture behind text (a scanned page with a text layer).
+ */
+internal fun keptImages(drawn: List<PdfImage>, textPages: Set<Int>): List<PdfImage> {
+    val pagesPerImage = drawn.groupBy { it.key }.mapValues { (_, l) -> l.map { it.page }.distinct().size }
+    return drawn.filter { (pagesPerImage[it.key] ?: 0) < 3 && !(it.fullPage && it.page in textPages) }.distinctBy { it.page to it.key }
+}
+
+/** Groups [words] (in page order) into visual lines. */
+internal fun pdfLines(words: List<PdfWord>): List<PdfLine> {
+    val out = ArrayList<PdfLine>()
+    var cur = ArrayList<PdfWord>()
+    for (w in words) {
+        val prev = cur.lastOrNull()
+        val sameLine = prev != null && prev.page == w.page && abs(prev.y - w.y) < 0.5f * maxOf(prev.size, w.size) && w.x0 >= prev.x0
+        if (!sameLine && cur.isNotEmpty()) { out += PdfLine(cur[0].page, cur); cur = ArrayList() }
+        cur += w
+    }
+    if (cur.isNotEmpty()) out += PdfLine(cur[0].page, cur)
+    return attachSuperscripts(out)
+}
+
+/**
+ * Folds superscripts (ordinals like the "rd" of 33rd, footnote marks) into the line they're raised above.
+ * Set smaller and higher, they otherwise come out as a line of their own, which then breaks the paragraph.
+ */
+private fun attachSuperscripts(lines: List<PdfLine>): List<PdfLine> {
+    val out = lines.toMutableList()
+    val gone = HashSet<Int>()
+    for ((i, sup) in lines.withIndex()) {
+        if (sup.words.size > 4 || sup.words.any { it.text.length > 4 }) continue
+        val host = (maxOf(0, i - 2)..minOf(lines.lastIndex, i + 2)).firstOrNull { j ->
+            val h = lines[j]
+            j != i && j !in gone && h.page == sup.page && h.words.size > sup.words.size && sup.size < h.size * 0.85f &&
+                h.y - sup.y > 0 && h.y - sup.y < h.size * 0.75f && sup.x0 >= h.x0 - 1f && sup.x1 <= h.x1 + h.size
+        } ?: continue
+        out[host] = PdfLine(sup.page, out[host].words.withSuperscripts(sup.words))
+        gone += i
+    }
+    return out.filterIndexed { i, _ -> i !in gone }
+}
+
+/** These words with [sups] glued onto the words they follow (or placed after them if there's a gap). */
+private fun List<PdfWord>.withSuperscripts(sups: List<PdfWord>): List<PdfWord> {
+    val ws = toMutableList()
+    for (s in sups) {
+        val k = ws.indexOfLast { it.x1 <= s.x0 + 0.5f }
+        if (k < 0) { ws.add(0, s); continue }
+        val w = ws[k]
+        if (s.x0 - w.x1 < w.size * 0.3f) ws[k] = PdfWord(w.page, w.text + s.text, w.x0, s.x1, w.y, w.size, w.bold)
+        else ws.add(k + 1, s)
+    }
+    return ws
 }
 
 /**
@@ -209,12 +246,12 @@ internal class PdfLayout(all: List<PdfLine>, private val pageHeights: List<Float
         return l.size <= body * 1.1f && (l.y < h * 0.07f || l.y > h * 0.93f)
     }
 
-    private fun key(l: PdfLine) = l.text.lowercase().replace(Regex("\\d+"), "#").trim()
+    private fun key(l: PdfLine) = l.text.lowercase().replace(DIGITS, "#").trim()
 
     private fun isRunningText(l: PdfLine): Boolean {
         if (!inMargin(l)) return false
         val t = l.text.trim()
-        return t.matches(Regex("(?i)(page\\s*)?[\\divxlcdm]{1,6}(\\s*(of|/)\\s*\\d+)?|[-–—]\\s*\\d+\\s*[-–—]")) || key(l) in repeated
+        return t.matches(PAGE_NUMBER) || key(l) in repeated
     }
 
     /** [y] is where the item starts on [page], for placing images between items. */
@@ -373,7 +410,7 @@ internal class PdfLayout(all: List<PdfLine>, private val pageHeights: List<Float
         return Chapter(title, blocks.toList(), startPage = blocks.first().page)
     }
 
-    private fun isLabel(t: String) = t.trim().matches(Regex("(?i)(chapter|part|book|section|lesson|unit)\\s+([\\divxlcdm]+|[a-z]+)\\.?"))
+    private fun isLabel(t: String) = t.trim().matches(LABEL)
 
     private fun titleCase(t: String): String {
         val letters = t.filter { it.isLetter() }
@@ -390,5 +427,9 @@ internal class PdfLayout(all: List<PdfLine>, private val pageHeights: List<Float
     private fun percentile(xs: List<Float>, p: Float): Float =
         if (xs.isEmpty()) 0f else xs.sorted()[((xs.size - 1) * p).roundToInt()]
 }
+
+private val DIGITS = Regex("\\d+")
+private val PAGE_NUMBER = Regex("(?i)(page\\s*)?[\\divxlcdm]{1,6}(\\s*(of|/)\\s*\\d+)?|[-–—]\\s*\\d+\\s*[-–—]")
+private val LABEL = Regex("(?i)(chapter|part|book|section|lesson|unit)\\s+([\\divxlcdm]+|[a-z]+)\\.?")
 
 internal fun String.endsSentence() = trimEnd().lastOrNull()?.let { it in ".!?:\"”’)" } ?: true

@@ -1,6 +1,7 @@
 package com.gbook
 
 import android.content.Intent
+import androidx.core.content.IntentCompat
 import android.net.Uri
 import android.os.Bundle
 import android.os.SystemClock
@@ -143,7 +144,14 @@ class MainActivity : ComponentActivity() {
     }
 
     private fun handleIntent(i: Intent?) {
-        if (i?.action == Intent.ACTION_VIEW) i.data?.let { pendingOpen.value = it }
+        when (i?.action) {
+            Intent.ACTION_VIEW -> i.data?.let { pendingOpen.value = it }
+            // Shared from another app: one book opens like "Open with", several are added to the library.
+            Intent.ACTION_SEND -> IntentCompat.getParcelableExtra(i, Intent.EXTRA_STREAM, Uri::class.java)?.let { pendingOpen.value = it }
+            Intent.ACTION_SEND_MULTIPLE -> IntentCompat.getParcelableArrayListExtra(i, Intent.EXTRA_STREAM, Uri::class.java)?.let { uris ->
+                if (uris.size == 1) pendingOpen.value = uris[0] else vm.importMany(uris)
+            }
+        }
         i?.getStringExtra(EXTRA_OPEN_BOOK)?.let { pendingBook.value = it }
     }
 }

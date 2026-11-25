@@ -183,6 +183,7 @@ import androidx.compose.ui.unit.TextUnit
 import com.gbook.AppViewModel
 import com.gbook.data.Book
 import com.gbook.data.BookContent
+import com.gbook.data.BookFormat
 import com.gbook.data.Chapter
 import com.gbook.data.Highlight
 import com.gbook.data.ReaderSettings
@@ -290,14 +291,33 @@ fun ReaderScreen(
     BarIconsOver(page)
     if (c == null || c.chapters.isEmpty()) {
         val progress by vm.importer.pdfProgress.collectAsState()
+        val failed by vm.importer.pdfFailed.collectAsState()
+        val pdf = book.format == BookFormat.PDF
+        // Text that was never made (GBook was closed while making it) is started again rather than waited for.
+        LaunchedEffect(bookId, book.textReady) {
+            if (pdf && !book.textReady && bookId !in vm.importer.pdfFailed.value) vm.importer.extractPdf(book)
+        }
+        val p = progress[bookId]
+        val broken = p == null && bookId in failed
+        val empty = p == null && !broken && c != null && (book.textReady || !pdf)
         Box(Modifier.fillMaxSize().background(page), contentAlignment = Alignment.Center) {
-            Column(horizontalAlignment = Alignment.CenterHorizontally) {
-                CircularProgressIndicator(color = ink)
-                val p = progress[bookId]
+            Column(Modifier.padding(horizontal = 32.dp), horizontalAlignment = Alignment.CenterHorizontally) {
+                if (!broken && !empty) CircularProgressIndicator(color = ink)
                 Text(
-                    if (p != null) "Preparing text for reading… ${(p * 100).toInt()}%" else if (c != null) "This book has no readable text" else "Opening…",
-                    color = ink.copy(alpha = 0.6f), modifier = Modifier.padding(top = 16.dp),
+                    when {
+                        p != null -> "Preparing text for reading… ${(p * 100).toInt()}%"
+                        broken -> "GBook couldn't make readable text from this PDF."
+                        empty && pdf -> "This PDF is scanned pages without a text layer, so it can't be shown as text. Its original pages read as they are."
+                        empty -> "This book has no readable text"
+                        else -> "Opening…"
+                    },
+                    color = ink.copy(alpha = 0.6f), textAlign = TextAlign.Center, modifier = Modifier.padding(top = 16.dp),
                 )
+                if (p != null && book.pageCount > 150) Text(
+                    "Long books take a minute or two. Keep GBook open meanwhile, or read the original pages.",
+                    color = ink.copy(alpha = 0.45f), fontSize = 14.sp, textAlign = TextAlign.Center, modifier = Modifier.padding(top = 8.dp),
+                )
+                if (broken) PillButton("Try again", { vm.importer.extractPdf(book) }, Modifier.padding(top = 20.dp), height = 44.dp)
                 if (modeToggle != null) Box(Modifier.padding(top = 24.dp)) { modeToggle() }
             }
             IconCircle(Icons.Rounded.ArrowBackIosNew, "Back", onBack, Modifier.align(Alignment.TopStart).statusBarsPadding().padding(12.dp), size = 44.dp)

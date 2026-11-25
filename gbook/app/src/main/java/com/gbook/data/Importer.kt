@@ -4,13 +4,23 @@ import android.content.Context
 import android.graphics.BitmapFactory
 import android.net.Uri
 import android.provider.OpenableColumns
+import android.util.Log
 import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.Dispatchers
+import kotlinx.coroutines.flow.MutableStateFlow
+import kotlinx.coroutines.flow.update
 import kotlinx.coroutines.launch
+import kotlinx.coroutines.sync.Mutex
+import kotlinx.coroutines.sync.withLock
 import kotlinx.coroutines.withContext
 import java.io.File
 import java.io.InputStream
 import java.security.MessageDigest
+
+private const val TAG = "GBookImport"
+
+/** A file that can't be added, with a message that can be shown as it is. */
+class ImportError(message: String) : Exception(message)
 
 private const val STARTER_BOOK = "starter/Fractured Minds.pdf"
 
@@ -19,7 +29,10 @@ private val SMALL_WORDS = setOf("a", "an", "and", "as", "at", "but", "by", "for"
 class Importer(private val ctx: Context, private val store: Store, private val scope: CoroutineScope) {
 
     /** Extraction progress for PDFs being converted to reflowable text, keyed by book id. */
-    val pdfProgress = kotlinx.coroutines.flow.MutableStateFlow<Map<String, Float>>(emptyMap())
+    val pdfProgress = MutableStateFlow<Map<String, Float>>(emptyMap())
+    /** PDFs whose text couldn't be made the last time it was tried. */
+    val pdfFailed = MutableStateFlow<Set<String>>(emptySet())
+    private val extracting = Mutex()
 
     suspend fun importUri(uri: Uri): Book {
         val name = ctx.contentResolver.query(uri, arrayOf(OpenableColumns.DISPLAY_NAME), null, null, null)
@@ -59,8 +72,12 @@ class Importer(private val ctx: Context, private val store: Store, private val s
         val id = md.digest().joinToString("") { "%02x".format(it) }.take(12)
         store.book(id)?.let { tmp.delete(); return@withContext it }
 
-        val magic = tmp.inputStream().use { s -> ByteArray(4).also { s.read(it) } }
-        val isPdf = magic[0] == '%'.code.toByte() && magic[1] == 'P'.code.toByte()
+        // Apps that don't know the file's type send it anyway, so check what it is. A PDF's header can come after
+        // some junk; an EPUB is a ZIP file.
+        val head = tmp.inputStream().use { s -> ByteArray(1024).let { b -> b.copyOf(maxOf(0, s.read(b))) } }
+        val isPdf = String(head, Charsets.ISO_8859_1).contains("%PDF-")
+        val isZip = head.size >= 4 && head[0] == 'P'.code.toByte() && head[1] == 'K'.code.toByte() && head[2] == 3.toByte() && head[3] == 4.toByte()
+        if (!isPdf && !isZip) { tmp.delete(); throw ImportError("That file isn't an EPUB or a PDF.") }
         val fallbackTitle = displayName.substringBeforeLast('.')
             .replace(Regex("\\s*\\((z-library|Z-Library|z-lib)[^)]*\\)"), "")
             .replace('_', ' ').replace('-', ' ').trim()
@@ -80,7 +97,11 @@ class Importer(private val ctx: Context, private val store: Store, private val s
             )
         } else {
             val f = File(store.bookDir(id), "book.epub"); tmp.copyTo(f, true); tmp.delete()
-            val r = EpubParser.parse(f, store.imagesDir(id))
+            val r = runCatching { EpubParser.parse(f, store.imagesDir(id)) }.getOrElse {
+                // A ZIP that isn't an EPUB (a Word file, an archive), or a broken one.
+                store.bookDir(id).deleteRecursively()
+                throw ImportError("GBook couldn't read that file as an EPUB.")
+            }
             r.cover?.let { store.coverFile(id).writeBytes(it) }
             store.saveContent(id, r.content)
             Book(
@@ -96,23 +117,45 @@ class Importer(private val ctx: Context, private val store: Store, private val s
         book
     }
 
+    /**
+     * Makes the reflowable text of a PDF in the background. Books wait their turn, as each already reads with
+     * several workers. A failure is remembered in [pdfFailed] so the reader can say so and offer to try again.
+     */
     fun extractPdf(book: Book) = scope.launch(Dispatchers.Default) {
-        if (pdfProgress.value.containsKey(book.id)) return@launch
-        pdfProgress.value += book.id to 0f
-        runCatching {
-            PdfSupport.init(ctx)
-            // Text from an older extractor, re-extracted now: keep the reader's place by page.
-            val old = if (book.textReady) store.content(book.id) else null
-            val c = PdfSupport.extract(store.bookFile(book), store.imagesDir(book.id)) { p -> pdfProgress.value += book.id to p }
-            store.saveContent(book.id, c)
-            store.updateBook(book.id) { b ->
-                b.copy(
-                    textReady = true, chapterCount = c.chapters.size, textVersion = PdfSupport.TEXT_VERSION,
-                    position = old?.let { remap(b.position, it, c) } ?: b.position,
-                )
-            }
+        var queued = false
+        pdfProgress.update { if (book.id in it) it else { queued = true; it + (book.id to 0f) } }
+        if (!queued) return@launch
+        pdfFailed.update { it - book.id }
+        val ok = extracting.withLock {
+            runCatching {
+                PdfSupport.init(ctx)
+                // Text from an older extractor, re-extracted now: keep the reader's place by page.
+                val old = if (book.textReady) store.content(book.id) else null
+                var shown = -1
+                val report: (Float) -> Unit = { p ->
+                    // Workers report every page; the screen only needs whole percents.
+                    val pct = (p * 100).toInt()
+                    if (pct != shown) { shown = pct; pdfProgress.update { m -> m + (book.id to p) } }
+                }
+                val c = try {
+                    PdfSupport.extract(store.bookFile(book), store.imagesDir(book.id), onProgress = report)
+                } catch (e: OutOfMemoryError) {
+                    // Several copies of a big PDF at once can be too much for the phone; read it with one.
+                    Log.w(TAG, "Out of memory reading ${book.title}, trying with one worker")
+                    System.gc()
+                    PdfSupport.extract(store.bookFile(book), store.imagesDir(book.id), workers = 1, onProgress = report)
+                }
+                store.saveContent(book.id, c)
+                store.updateBook(book.id) { b ->
+                    b.copy(
+                        textReady = true, chapterCount = c.chapters.size, textVersion = PdfSupport.TEXT_VERSION,
+                        position = old?.let { remap(b.position, it, c) } ?: b.position,
+                    )
+                }
+            }.onFailure { Log.w(TAG, "Couldn't make text for ${book.title}", it) }.isSuccess
         }
-        pdfProgress.value -= book.id
+        if (!ok) pdfFailed.update { it + book.id }
+        pdfProgress.update { it - book.id }
     }
 
     /** Moves a reflow position from [old] text to the same PDF page in [new] text. */

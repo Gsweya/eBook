@@ -7,6 +7,7 @@ import androidx.lifecycle.viewModelScope
 import com.gbook.data.Backup
 import com.gbook.data.Definition
 import com.gbook.data.Dictionary
+import com.gbook.data.ImportError
 import com.gbook.data.FINISHED
 import com.gbook.data.Book
 import com.gbook.data.BookCollection
@@ -149,7 +150,7 @@ class AppViewModel(app: Application) : AndroidViewModel(app) {
         busy.value = "Importing…"
         runCatching { importer.importUri(uri) }
             .onSuccess { toast("Added “${it.title}”"); then(it) }
-            .onFailure { toast("Couldn't open that file: ${it.message ?: "unknown error"}") }
+            .onFailure { toast((it as? ImportError)?.message ?: "Couldn't open that file: ${it.message ?: "unknown error"}") }
         busy.value = null
     }
 

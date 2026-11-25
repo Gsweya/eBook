@@ -195,6 +195,8 @@ import com.gbook.ui.components.GoalRing
 import com.gbook.ui.components.todayMs
 import com.gbook.ui.components.CapsuleDivider
 import com.gbook.ui.components.CapsuleSegment
+import com.gbook.ui.components.ColorPickerButton
+import com.gbook.ui.components.ImageViewer
 import com.gbook.ui.components.GSheet
 import com.gbook.ui.components.GSlider
 import com.gbook.ui.components.GSwitch
@@ -208,6 +210,7 @@ import com.gbook.ui.components.shareText
 import com.gbook.ui.theme.GType
 import com.gbook.ui.theme.HighlightColors
 import com.gbook.ui.theme.DisplaySerif
+import com.gbook.ui.theme.BarIconsOver
 import com.gbook.ui.theme.LocalG
 import com.gbook.ui.theme.QuoteSerif
 import com.gbook.ui.theme.ReaderThemes
@@ -216,6 +219,8 @@ import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.FlowPreview
 import kotlinx.coroutines.delay
 import kotlinx.coroutines.flow.debounce
+import kotlinx.coroutines.flow.drop
+import kotlinx.coroutines.flow.filterNotNull
 import kotlinx.coroutines.launch
 import kotlinx.coroutines.withContext
 
@@ -281,6 +286,8 @@ fun ReaderScreen(
     val dark = LocalG.current.dark
     val page = if (dark) rt.pageDark else rt.page
     val ink = if (dark) rt.textDark else rt.text
+    // The page runs under the status bar, and its colour can differ from the app's mode (Quiet is dark in light mode).
+    BarIconsOver(page)
     if (c == null || c.chapters.isEmpty()) {
         val progress by vm.importer.pdfProgress.collectAsState()
         Box(Modifier.fillMaxSize().background(page), contentAlignment = Alignment.Center) {
@@ -359,6 +366,8 @@ private fun ReaderContent(
     var showGenerate by remember { mutableStateOf(false) }
     var searchTerm by remember { mutableStateOf<String?>(null) }
     var defineWord by remember { mutableStateOf<String?>(null) }
+    /** The picture open full screen, by its block in this chapter. */
+    var viewImage by remember(chapter) { mutableStateOf<Int?>(null) }
     var sizeHud by remember { mutableStateOf(0) }
     // Selection loupe source point in reader coordinates; Unspecified hides it.
     var loupe by remember { mutableStateOf(Offset.Unspecified) }
@@ -555,76 +564,81 @@ private fun ReaderContent(
         alignTop(forward = false)
     }
 
-    // Coming back to a book (opening it, or returning to the app): the last line on screen, where reading
-    // stopped, is washed in the accent colour for a few seconds so the eye finds its place.
-    var resumeMark by remember { mutableStateOf<Pair<Int, Int>?>(null) }
-    val markFade = remember { Animatable(0f) }
-    var markRequest by remember { mutableIntStateOf(if (startChapter == null && (book.position.item > 0 || book.position.offset > 0 || book.progress > 0f)) 1 else 0) }
-    fun lastLineOnScreen(): Pair<Int, Int>? {
-        val cut = if (paged) pageCut() else contentBottom()
-        var best: Pair<Int, Int>? = null
-        for (it in listState.layoutInfo.visibleItemsInfo) {
-            val l = paras[it.index]?.layout ?: continue
-            val t = itemTop(it)
-            for (line in 0 until l.lineCount) {
-                if (t + l.getLineTop(line) < contentTop() - 0.5f) continue
-                if (t + l.getLineBottom(line) <= cut + 0.5f) best = it.index to line
-            }
-        }
-        return best
-    }
-    LaunchedEffect(markRequest) {
-        if (markRequest == 0) return@LaunchedEffect
-        // Let the saved position (and, in page mode, the whole-line alignment) settle first.
-        delay(450)
-        resumeMark = lastLineOnScreen() ?: return@LaunchedEffect
-        markFade.snapTo(0f)
-        markFade.animateTo(1f, tween(350))
-        delay(2600)
-        markFade.animateTo(0f, tween(900))
-        resumeMark = null
-    }
-    val lifecycle = androidx.lifecycle.compose.LocalLifecycleOwner.current.lifecycle
-    DisposableEffect(lifecycle) {
-        var stopped = false
-        val obs = androidx.lifecycle.LifecycleEventObserver { _, e ->
-            if (e == androidx.lifecycle.Lifecycle.Event.ON_STOP) stopped = true
-            if (e == androidx.lifecycle.Lifecycle.Event.ON_START && stopped) { stopped = false; markRequest++ }
-        }
-        lifecycle.addObserver(obs)
-        onDispose { lifecycle.removeObserver(obs) }
-    }
-
     // Reading tracker: a marker stepped word by word (or sentence by sentence) by turning the wheel on the right edge.
-    var track by remember(chapter) { mutableStateOf<Track?>(null) }
     val unitCache = remember(chapter, s.trackerUnit) { HashMap<Int, List<IntRange>>() }
-    fun units(b: Int) = unitCache.getOrPut(b) { ch.blocks[b].takeIf { it.type == 0 }?.let { trackerUnits(it.text, s.trackerUnit == 1) }.orEmpty() }
-    /** Root-y span of the first line of tracker unit [t], or null if its paragraph isn't laid out on screen. */
-    fun trackLine(t: Track): Pair<Float, Float>? {
+    fun units(b: Int) = unitCache.getOrPut(b) { ch.blocks.getOrNull(b)?.takeIf { it.type == 0 }?.let { trackerUnits(it.text, s.trackerUnit == 1) }.orEmpty() }
+    // Starts where it was left in this chapter (saved with the reading position), so reopening the book shows it there.
+    var track by remember(chapter, s.trackerUnit) {
+        val p = vm.store.book(book.id)?.position
+        mutableStateOf(p?.takeIf { it.trackChapter == chapter && it.trackBlock >= 0 }?.let { saved ->
+            units(saved.trackBlock).indexOfFirst { saved.trackOff <= it.last }.takeIf { it >= 0 }?.let { Track(saved.trackBlock, it) }
+        })
+    }
+    // The view follows the marker only once the wheel has moved it; a restored marker leaves the page where it is.
+    val followTrack = remember(chapter, s.trackerUnit) { BooleanArray(1) }
+    LaunchedEffect(chapter, s.trackerUnit) {
+        snapshotFlow { track }.drop(1).filterNotNull().debounce(500).collect { t ->
+            units(t.block).getOrNull(t.unit)?.let { vm.saveTrack(book.id, chapter, t.block, it.first) }
+        }
+    }
+    /** Root-y of tracker unit [t]'s first line top, last line top and last line bottom, or null if its paragraph isn't laid out on screen. */
+    fun trackSpan(t: Track): Triple<Float, Float, Float>? {
         val r = units(t.block).getOrNull(t.unit) ?: return null
         val it = listState.layoutInfo.visibleItemsInfo.firstOrNull { it.index == t.block } ?: return null
         val l = paras[t.block]?.layout ?: return null
-        val line = l.getLineForOffset(r.first.coerceIn(0, (l.layoutInput.text.length - 1).coerceAtLeast(0)))
-        return itemTop(it) + l.getLineTop(line) to itemTop(it) + l.getLineBottom(line)
+        val n = l.layoutInput.text.length.takeIf { it > 0 } ?: return null
+        val first = l.getLineForOffset(r.first.coerceIn(0, n - 1)); val last = l.getLineForOffset(r.last.coerceIn(0, n - 1))
+        val y = itemTop(it)
+        return Triple(y + l.getLineTop(first), y + l.getLineTop(last), y + l.getLineBottom(last))
     }
-    /** Whether stepping should continue from [t], rather than restart at the top of what's on screen. Lenient
-     *  so that quick steps made while the page is still turning or scrolling don't lose their place. */
+    /** Whether any part of [t] is on screen, so stepping continues from it rather than restarting at the top of
+     *  the page. Lenient so that quick steps made while the page is still turning or scrolling don't lose their place. */
     fun onPage(t: Track): Boolean {
-        val (lt, lb) = trackLine(t) ?: return false
-        return if (paged) turning[0] || (lt >= contentTop() - 0.5f && lt < contentBottom() + lineH())
-        else lb > contentTop() - lineH() && lt < viewport.height
+        val (top, lastTop, bottom) = trackSpan(t) ?: return false
+        return if (paged) turning[0] || (lastTop >= contentTop() - 0.5f && top < contentBottom() + lineH())
+        else bottom > contentTop() - lineH() && top < viewport.height
     }
+    /** Whether [t] is cut by the page edge, with its rest on the next page ([forward]) or the previous one. */
+    fun runsOff(t: Track, forward: Boolean): Boolean {
+        val (top, lastTop, bottom) = trackSpan(t) ?: return false
+        return if (paged) {
+            if (forward) top < pageCut() - 0.5f && lastTop >= pageCut() - 0.5f
+            else top < contentTop() - 0.5f && lastTop >= contentTop() - 0.5f
+        } else {
+            if (forward) top < contentBottom() && bottom > contentBottom() + 0.5f
+            else top < contentTop() - 0.5f && bottom > contentTop()
+        }
+    }
+    /** Brings the rest of a unit cut by the page edge into view: the next or previous page, or a scroll. */
+    fun revealRest(t: Track, forward: Boolean) {
+        if (paged) return turnPage(forward)
+        val (top, _, bottom) = trackSpan(t) ?: return
+        // Never jump past lines not yet seen: at most a screen less two lines.
+        val most = (pageH() - 2 * lineH()).coerceAtLeast(lineH())
+        val by = if (forward) maxOf(bottom - contentBottom() + lineH(), top - (contentTop() + pageH() * 0.3f)).coerceAtMost(most)
+        else (top - (contentTop() + pageH() * 0.3f)).coerceAtLeast(-most)
+        scope.launch { listState.animateScrollBy(by) }
+    }
+    /** First unit with any part on screen, including one carried over from the previous page. */
     fun firstUnitOnPage(): Track? {
         for (it in listState.layoutInfo.visibleItemsInfo) {
             val l = paras[it.index]?.layout ?: continue
             val us = units(it.index)
-            val idx = us.indexOfFirst { u -> itemTop(it) + l.getLineTop(l.getLineForOffset(u.first)) >= contentTop() - 0.5f }
+            val idx = us.indexOfFirst { u -> itemTop(it) + l.getLineTop(l.getLineForOffset(u.last)) >= contentTop() - 0.5f }
             if (idx >= 0) return Track(it.index, idx)
         }
         return null
     }
     fun stepTrack(forward: Boolean): Boolean {
+        followTrack[0] = true
         val t = track?.takeIf { onPage(it) } ?: return firstUnitOnPage()?.also { track = it } != null
+        // A sentence split across the page edge takes two steps: the first brings its other half into view and
+        // keeps the marker on it, so the half still to read isn't skipped. Mid-turn the layout is stale: wait.
+        if (runsOff(t, forward)) {
+            if (turning[0]) return false
+            revealRest(t, forward)
+            return true
+        }
         val next = if (forward) {
             if (t.unit + 1 < units(t.block).size) t.copy(unit = t.unit + 1)
             else (t.block + 1 until ch.blocks.size).firstOrNull { units(it).isNotEmpty() }?.let { Track(it, 0) }
@@ -648,18 +662,70 @@ private fun ReaderContent(
     // Keep the tracked text in view: turn the page, or scroll it back to the upper third of the screen.
     LaunchedEffect(track) {
         val t = track ?: return@LaunchedEffect
-        val span = trackLine(t)
+        if (!followTrack[0]) return@LaunchedEffect
+        val span = trackSpan(t)
         if (span == null) {
             if (paged) { listState.scrollToItem(t.block); withFrameNanos { }; alignTop(forward = false) }
             else listState.animateScrollToItem(t.block, -(pageH() * 0.3f).toInt())
             return@LaunchedEffect
         }
-        val (lt, lb) = span
+        val (top, lastTop, _) = span
         if (paged) {
-            if (lt >= pageCut() - 0.5f) turnPage(true) else if (lt < contentTop() - 0.5f) turnPage(false)
-        } else if (lt < contentTop() || lb > contentBottom() - lineH()) {
-            listState.animateScrollBy(lt - (contentTop() + pageH() * 0.3f))
+            // Only when none of it is on this page: a unit cut by the edge stays put until the next step.
+            if (top >= pageCut() - 0.5f) turnPage(true) else if (lastTop < contentTop() - 0.5f) turnPage(false)
+        } else if (top < contentTop() || top + lineH() > contentBottom() - lineH()) {
+            listState.animateScrollBy(top - (contentTop() + pageH() * 0.3f))
         }
+    }
+
+    // Coming back to a book (opening it, or returning to the app): where reading stopped is washed in the accent
+    // colour for a few seconds so the eye finds its place. That's the tracker's word or sentence when it's on
+    // screen, else the last line on screen.
+    var resumeMark by remember { mutableStateOf<Pair<Int, IntRange>?>(null) }
+    val markFade = remember { Animatable(0f) }
+    var markRequest by remember { mutableIntStateOf(if (startChapter == null && (book.position.item > 0 || book.position.offset > 0 || book.progress > 0f)) 1 else 0) }
+    fun lastLineOnScreen(): Pair<Int, IntRange>? {
+        val cut = if (paged) pageCut() else contentBottom()
+        var best: Pair<Int, IntRange>? = null
+        for (it in listState.layoutInfo.visibleItemsInfo) {
+            val l = paras[it.index]?.layout ?: continue
+            val t = itemTop(it)
+            for (line in 0 until l.lineCount) {
+                if (t + l.getLineTop(line) < contentTop() - 0.5f) continue
+                if (t + l.getLineBottom(line) <= cut + 0.5f) best = it.index to line..line
+            }
+        }
+        return best
+    }
+    fun trackedLines(): Pair<Int, IntRange>? {
+        val t = track?.takeIf { s.tracker } ?: return null
+        val (top, lastTop, _) = trackSpan(t) ?: return null
+        val cut = if (paged) pageCut() else contentBottom()
+        if (lastTop < contentTop() - 0.5f || top >= cut - 0.5f) return null
+        val r = units(t.block).getOrNull(t.unit) ?: return null
+        val l = paras[t.block]?.layout ?: return null
+        return t.block to l.getLineForOffset(r.first)..l.getLineForOffset(r.last)
+    }
+    LaunchedEffect(markRequest) {
+        if (markRequest == 0 && track == null) return@LaunchedEffect
+        // Let the saved position (and, in page mode, the whole-line alignment) settle first.
+        delay(450)
+        resumeMark = trackedLines() ?: lastLineOnScreen()?.takeIf { markRequest > 0 } ?: return@LaunchedEffect
+        markFade.snapTo(0f)
+        markFade.animateTo(1f, tween(350))
+        delay(2600)
+        markFade.animateTo(0f, tween(900))
+        resumeMark = null
+    }
+    val lifecycle = androidx.lifecycle.compose.LocalLifecycleOwner.current.lifecycle
+    DisposableEffect(lifecycle) {
+        var stopped = false
+        val obs = androidx.lifecycle.LifecycleEventObserver { _, e ->
+            if (e == androidx.lifecycle.Lifecycle.Event.ON_STOP) stopped = true
+            if (e == androidx.lifecycle.Lifecycle.Event.ON_START && stopped) { stopped = false; markRequest++ }
+        }
+        lifecycle.addObserver(obs)
+        onDispose { lifecycle.removeObserver(obs) }
     }
 
     fun onPageTap(x: Float) {
@@ -805,8 +871,14 @@ private fun ReaderContent(
                             // heightIn before aspectRatio lets tall images shrink in width instead of overflowing.
                             if (bmp != null) Box(Modifier.fillMaxWidth().padding(vertical = 12.dp), contentAlignment = Alignment.Center) {
                                 Image(
-                                    bmp, null, contentScale = ContentScale.Fit,
-                                    modifier = Modifier.heightIn(max = 520.dp).aspectRatio(bmp.width.toFloat() / bmp.height.coerceAtLeast(1)),
+                                    bmp, "Picture: tap to view", contentScale = ContentScale.Fit,
+                                    modifier = Modifier.heightIn(max = 520.dp).aspectRatio(bmp.width.toFloat() / bmp.height.coerceAtLeast(1))
+                                        // Tapping a picture opens it full screen (the reader's own tap would turn the page).
+                                        .pointerInput(chapter, i) {
+                                            detectTapGestures(onTap = {
+                                                if (sel != null || activeHl != null) { sel = null; activeHl = null } else viewImage = i
+                                            })
+                                        },
                                 )
                             }
                         }
@@ -826,7 +898,7 @@ private fun ReaderContent(
                                 searchTerm = searchTerm,
                                 tracked = track?.takeIf { s.tracker && it.block == i }?.let { units(i).getOrNull(it.unit) },
                                 trackColor = g.accent,
-                                markLine = resumeMark?.takeIf { it.first == i }?.second,
+                                markLines = resumeMark?.takeIf { it.first == i }?.second,
                                 markAlpha = { markFade.value },
                                 onTap = { off, w ->
                                     val hit = hls.firstOrNull { off in it.rangeIn(i, b.text.length) }
@@ -870,7 +942,11 @@ private fun ReaderContent(
                 if (cut > contentTop() + 1f) drawRect(page, Offset(0f, cut), Size(size.width, size.height - cut))
             })
         } else {
-            Box(Modifier.fillMaxWidth().height(top + 64.dp).background(Brush.verticalGradient(0f to page, 0.72f to page, 1f to page.copy(alpha = 0f))))
+            // Safe band under the status bar and chapter name: text scrolling up fades out over 16dp and is gone
+            // 6dp below the chapter name, so it never runs into the name or the status bar icons. The fade ends
+            // where the first line sits at rest, so that line is never washed out.
+            val band = top + 56.dp
+            Box(Modifier.fillMaxWidth().height(band).background(Brush.verticalGradient((top + 40.dp) / band to page, 1f to page.copy(alpha = 0f))))
             Box(Modifier.align(Alignment.BottomCenter).fillMaxWidth().height(bottom + 92.dp).background(Brush.verticalGradient(0f to page.copy(alpha = 0f), 0.4f to page, 1f to page)))
         }
         if (s.tracker) TrackerWheel(
@@ -1004,7 +1080,9 @@ private fun ReaderContent(
                 },
                 // The bar stays open on the new highlight so a reaction or note can follow.
                 onColor = { color ->
-                    if (existing != null) { vm.updateHighlight(existing.id) { it.copy(color = color) }; activeHl = existing.copy(color = color) }
+                    // No colour takes an existing highlight off; on a fresh selection it just lets the text go.
+                    if (color == null) { existing?.let { vm.deleteHighlight(it.id) }; sel = null; activeHl = null }
+                    else if (existing != null) { vm.updateHighlight(existing.id) { it.copy(color = color) }; activeHl = existing.copy(color = color) }
                     else sel?.let { ss -> activeHl = vm.addHighlight(book.id, chapter, ss.start.block, ss.start.off, ss.end.block, ss.end.off, selText!!, color, ch.title, style = s.highlightStyle); sel = null }
                 },
                 reaction = existing?.reaction,
@@ -1087,6 +1165,15 @@ private fun ReaderContent(
         searchTerm = term; showSearch = false; chrome = false; goTo(chIdx, block)
     }
     if (showGenerate) GeneratePostsSheet(vm, onDismiss = { showGenerate = false }, preselect = book.id)
+    viewImage?.let { block ->
+        val pictures = remember(chapter) { ch.blocks.withIndex().filter { it.value.type == 2 && !it.value.src.isNullOrEmpty() } }
+        ImageViewer(
+            paths = pictures.map { vm.imagePath(book.id, it.value.src!!) },
+            start = pictures.indexOfFirst { it.index == block }.coerceAtLeast(0),
+            shareText = "From “${book.title}” by ${book.author}",
+            onDismiss = { viewImage = null },
+        )
+    }
     defineWord?.let {
         DefineSheet(vm, it, onDismiss = { defineWord = null }, onPost = { d -> vm.postWord(book.id, d, chapter, ch.title); defineWord = null })
     }
@@ -1260,8 +1347,8 @@ private fun Paragraph(
     /** Reading-tracker unit to mark in this paragraph. */
     tracked: IntRange?,
     trackColor: Color,
-    /** Line to wash in [trackColor] where reading stopped, faded by [markAlpha] (read while drawing). */
-    markLine: Int?,
+    /** Lines to wash in [trackColor] where reading stopped, faded by [markAlpha] (read while drawing). */
+    markLines: IntRange?,
     markAlpha: () -> Float,
     /** Character offset and window position of a tap. */
     onTap: (Int, Offset) -> Unit,
@@ -1305,11 +1392,11 @@ private fun Paragraph(
                     underline(l, glyphs, it, trackColor, 2.dp.toPx(), 3.dp.toPx())
                 }
                 selection?.let { fill(l, glyphs, it, SelectionColor.copy(alpha = 0.7f)) }
-                markLine?.takeIf { it < l.lineCount }?.let { line ->
+                markLines?.takeIf { it.first < l.lineCount }?.let { lines ->
                     val a = markAlpha()
-                    val top = l.getLineTop(line); val bottom = l.getLineBottom(line)
+                    val top = l.getLineTop(lines.first); val bottom = l.getLineBottom(minOf(lines.last, l.lineCount - 1))
                     drawRect(trackColor.copy(alpha = 0.16f * a), Offset(0f, top), Size(size.width, bottom - top))
-                    // A short bar in the margin beside the line.
+                    // A short bar in the margin beside the lines.
                     val w = 3.dp.toPx()
                     drawRoundRect(trackColor.copy(alpha = a), Offset(-w - 8.dp.toPx(), top + 3.dp.toPx()), Size(w, bottom - top - 6.dp.toPx()), CornerRadius(w / 2))
                 }
@@ -1551,7 +1638,8 @@ private fun SelectionBar(
     isExisting: Boolean,
     style: Int,
     onStyle: (Int) -> Unit,
-    onColor: (Int) -> Unit,
+    /** A colour from [HighlightColors], or null for no colour. */
+    onColor: (Int?) -> Unit,
     reaction: String?,
     onReact: (String) -> Unit,
     onNote: () -> Unit,
@@ -1594,13 +1682,7 @@ private fun SelectionBar(
                     ) { Icon(icon, label, tint = if (style == i) g.accent else g.text2, modifier = Modifier.size(18.dp)) }
                 }
             }
-            HighlightColors.forEachIndexed { i, col ->
-                Box(
-                    Modifier.size(34.dp).clip(CircleShape).background(col)
-                        .then(if (activeColor == i) Modifier.border(3.dp, g.text, CircleShape) else Modifier)
-                        .clickable { onColor(i) },
-                )
-            }
+            ColorPickerButton(activeColor, emptyLabel = "Color", onPick = onColor)
             if (isExisting) Icon(Icons.Rounded.DeleteOutline, "Delete highlight", tint = g.destructive, modifier = Modifier.size(34.dp).clip(CircleShape).clickable(onClick = onDelete).padding(4.dp))
         }
         Spacer(Modifier.height(10.dp))
@@ -2015,20 +2097,8 @@ fun TrackerOptions(s: ReaderSettings, vm: AppViewModel) {
             if (s.trackerColor < 0) "Off: the wheel only moves the marker" else "Turning the wheel highlights what the marker passes",
             fontSize = 15.sp, color = g.text2,
         )
-        Row(Modifier.padding(top = 10.dp), horizontalArrangement = Arrangement.spacedBy(10.dp), verticalAlignment = Alignment.CenterVertically) {
-            Box(
-                Modifier.size(34.dp).clip(CircleShape).background(g.fill)
-                    .border(if (s.trackerColor < 0) 2.5.dp else 0.dp, if (s.trackerColor < 0) g.text else Color.Transparent, CircleShape)
-                    .clickable { vm.updateSettings { it.copy(trackerColor = -1) } },
-                contentAlignment = Alignment.Center,
-            ) { Icon(Icons.Rounded.Close, "Off", tint = g.text2, modifier = Modifier.size(18.dp)) }
-            HighlightColors.forEachIndexed { i, col ->
-                Box(
-                    Modifier.size(34.dp).clip(CircleShape).background(col)
-                        .then(if (s.trackerColor == i) Modifier.border(2.5.dp, g.text, CircleShape) else Modifier)
-                        .clickable { vm.updateSettings { it.copy(trackerColor = i) } },
-                )
-            }
+        Box(Modifier.padding(top = 10.dp)) {
+            ColorPickerButton(s.trackerColor.takeIf { it >= 0 }, emptyLabel = "No color", onPick = { c -> vm.updateSettings { it.copy(trackerColor = c ?: -1) } })
         }
     }
     Row(Modifier.fillMaxWidth().padding(horizontal = 20.dp, vertical = 10.dp), verticalAlignment = Alignment.CenterVertically) {

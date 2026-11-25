@@ -23,7 +23,7 @@ pub enum BookFormat {
     PDF,
 }
 
-#[derive(Serialize, Deserialize, Clone, Debug, Default, PartialEq)]
+#[derive(Serialize, Deserialize, Clone, Debug, PartialEq)]
 #[serde(default, rename_all = "camelCase")]
 pub struct ReadingPosition {
     pub chapter: i32,
@@ -32,8 +32,28 @@ pub struct ReadingPosition {
     /// Pixels scrolled past the top of that paragraph.
     pub offset: i32,
     pub pdf_page: i32,
+    /// Where the focus tracker was left: chapter and paragraph (-1 for none) and the UTF-16 offset where its
+    /// word or sentence starts, so reopening the book shows it there again.
+    pub track_chapter: i32,
+    pub track_block: i32,
+    pub track_off: i32,
     #[serde(flatten)]
     pub extra: Extra,
+}
+
+impl Default for ReadingPosition {
+    fn default() -> Self {
+        Self {
+            chapter: 0,
+            item: 0,
+            offset: 0,
+            pdf_page: 0,
+            track_chapter: -1,
+            track_block: -1,
+            track_off: 0,
+            extra: Extra::default(),
+        }
+    }
 }
 
 #[derive(Serialize, Deserialize, Clone, Debug)]
@@ -66,6 +86,9 @@ pub struct Book {
     pub rating: i32,
     /// When the reading position last changed; sync lets the device that read most recently win.
     pub position_at: i64,
+    /// When reading time was first counted in this book, and when it was finished (0 for not yet).
+    pub started_at: i64,
+    pub finished_at: i64,
     #[serde(flatten)]
     pub extra: Extra,
 }
@@ -95,6 +118,8 @@ impl Default for Book {
             pages_read: 0,
             rating: 0,
             position_at: 0,
+            started_at: 0,
+            finished_at: 0,
             extra: Extra::new(),
         }
     }

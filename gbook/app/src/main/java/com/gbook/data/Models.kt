@@ -11,6 +11,10 @@ data class ReadingPosition(
     val item: Int = 0,
     val offset: Int = 0,
     val pdfPage: Int = 0,
+    /** Where the reading tracker was left: chapter, paragraph and the character offset of its word or sentence. */
+    val trackChapter: Int = -1,
+    val trackBlock: Int = -1,
+    val trackOff: Int = 0,
 )
 
 @Serializable

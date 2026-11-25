@@ -200,6 +200,9 @@ impl LibraryData {
         }
         if let Some(b) = self.book_mut(book_id) {
             b.reading_ms += ms;
+            if b.started_at == 0 {
+                b.started_at = now_ms();
+            }
         }
         *self.reading_log.entry(day.to_string()).or_default() += ms;
         *self
@@ -223,6 +226,9 @@ impl LibraryData {
             let progress = progress.clamp(0.0, 1.0);
             if b.position != pos || b.progress != progress {
                 b.position_at = now_ms();
+            }
+            if b.finished_at == 0 && progress >= crate::readthrough::FINISHED {
+                b.finished_at = now_ms();
             }
             b.position = pos;
             b.progress = progress;

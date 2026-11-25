@@ -3,7 +3,7 @@
 
 use std::rc::Rc;
 
-use gbook_core::library::{format_duration, reading_streak};
+use gbook_core::library::{format_duration, plural, reading_streak};
 use gbook_core::{dates, plans};
 use gtk::pango;
 use gtk::prelude::*;
@@ -181,6 +181,11 @@ impl Badge {
             )
         };
         facts.append(&label(&goal_line, &["semibold"]));
+        let pages = d.pages_log.get(&dates::key(today_n)).copied().unwrap_or(0);
+        facts.append(&label(
+            &format!("{} today", plural(pages.max(0) as usize, "page")),
+            &["caption", "text2"],
+        ));
         let streak = reading_streak(&d.reading_log, today_n);
         facts.append(&label(
             &format!("{} day streak", streak),

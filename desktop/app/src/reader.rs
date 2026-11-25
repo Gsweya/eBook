@@ -78,6 +78,11 @@ pub struct Reader {
     wheel: RefCell<Option<Rc<crate::tracker::Wheel>>>,
     on_back: Rc<dyn Fn()>,
     closed: Cell<bool>,
+    /// Where reading stopped, washed in the accent colour for a few seconds on coming back to the book: a
+    /// buffer range and how strongly it shows (0 to 1). Bumping `resume_gen` stops a fade under way.
+    resume_mark: Cell<Option<(i32, i32)>>,
+    resume_alpha: Cell<f64>,
+    resume_gen: Cell<u32>,
 }
 
 pub fn open(
@@ -313,6 +318,9 @@ pub fn open(
         wheel: RefCell::new(None),
         on_back,
         closed: Cell::new(false),
+        resume_mark: Cell::new(None),
+        resume_alpha: Cell::new(0.0),
+        resume_gen: Cell::new(0),
     });
 
     let w = Rc::downgrade(&r);
@@ -369,6 +377,33 @@ pub fn open(
     r.install_input(&root);
     r.render();
     CURRENT.with(|c| *c.borrow_mut() = Rc::downgrade(&r));
+    // Opening a book part way through: show where reading stopped. Also on coming back to the window after
+    // a while away.
+    let p = &book.position;
+    if at.is_none() && (p.item > 0 || p.offset > 0 || book.progress > 0.0) {
+        r.request_resume_mark();
+    }
+    if let Some(win) = app.window() {
+        let left = Rc::new(Cell::new(None::<Instant>));
+        let w = Rc::downgrade(&r);
+        let id = win.connect_is_active_notify(move |win| {
+            if !win.is_active() {
+                left.set(Some(Instant::now()));
+            } else if left
+                .take()
+                .is_some_and(|t| t.elapsed() >= Duration::from_secs(120))
+            {
+                with(&w, |r| r.request_resume_mark());
+            }
+        });
+        let win2 = win.clone();
+        let cell = RefCell::new(Some(id));
+        root.connect_unrealize(move |_| {
+            if let Some(id) = cell.borrow_mut().take() {
+                win2.disconnect(id);
+            }
+        });
+    }
 
     let w = Rc::downgrade(&r);
     r.listener
@@ -504,7 +539,21 @@ impl Reader {
     fn render(self: &Rc<Self>) {
         let s = self.settings();
         self.units.borrow_mut().clear();
-        self.track.set(None);
+        // A new layout moves the text under a mark being shown; a mark still to come measures afresh.
+        self.resume_mark.set(None);
+        // The tracker starts where it was left in this chapter, saved with the reading position (on either app).
+        let saved = self
+            .app
+            .data()
+            .book(&self.book_id)
+            .map(|b| b.position.clone())
+            .filter(|p| p.track_chapter == self.chapter.get() as i32 && p.track_block >= 0);
+        self.track.set(saved.and_then(|p| {
+            self.units_of(p.track_block)
+                .iter()
+                .position(|&(_, e)| p.track_off < e)
+                .map(|u| (p.track_block, u))
+        }));
         self.paint_from.set(None);
         if let Some(w) = self.wheel.borrow().as_ref() {
             w.widget.set_visible(s.tracker);
@@ -1055,6 +1104,26 @@ impl Reader {
         });
     }
 
+    /// Saves where the tracker stands with the reading position, so the book reopens with it there.
+    fn save_track(&self) {
+        let Some((b, u)) = self.track.get() else {
+            return;
+        };
+        let Some(&(off, _)) = self.units_of(b).get(u) else {
+            return;
+        };
+        let (id, ch) = (self.book_id.clone(), self.chapter.get() as i32);
+        self.app.update_quiet(|d| {
+            if let Some(book) = d.book_mut(&id) {
+                let p = &mut book.position;
+                if (p.track_chapter, p.track_block, p.track_off) != (ch, b, off) {
+                    (p.track_chapter, p.track_block, p.track_off) = (ch, b, off);
+                    book.position_at = gbook_core::now_ms();
+                }
+            }
+        });
+    }
+
     fn touch(&self) {
         self.last_input.set(Instant::now());
     }
@@ -1250,10 +1319,46 @@ impl Reader {
         });
         self.scroller.add_controller(wheel);
 
+        // A touchpad pinch resizes the text, a whole point at a time, as the pinch on the phone does.
+        let pinch = gtk::GestureZoom::new();
+        let base = Rc::new(Cell::new(0.0f32));
+        let (w, b) = (Rc::downgrade(self), base.clone());
+        pinch.connect_begin(move |_, _| with(&w, |r| b.set(r.settings().font_size)));
+        let w = Rc::downgrade(self);
+        pinch.connect_scale_changed(move |_, k| {
+            with(&w, |r| {
+                let target = (base.get() * k as f32).round().clamp(MIN_FONT, MAX_FONT);
+                let now = r.settings().font_size;
+                if (target - now).abs() >= 1.0 {
+                    r.change_font(target - now);
+                }
+            })
+        });
+        self.scroller.add_controller(pinch);
+
+        // Where the pointer is over the text, in the view's coordinates, and where the last press was.
+        let pointer = Rc::new(Cell::new((0.0f64, 0.0f64)));
+        let over_view = gtk::EventControllerMotion::new();
+        let (w, p) = (Rc::downgrade(self), pointer.clone());
+        over_view.connect_motion(move |_, x, y| {
+            p.set((x, y));
+            // Pictures open when clicked: say so with the pointer.
+            with(&w, |r| {
+                let name = if r.image_at(x, y).is_some() {
+                    "zoom-in"
+                } else {
+                    "text"
+                };
+                r.view.set_cursor_from_name(Some(name));
+            })
+        });
+        self.view.add_controller(over_view);
+
         // Selection and clicks on highlights: act once the button is released and the text view has updated.
         let legacy = gtk::EventControllerLegacy::new();
         let w = Rc::downgrade(self);
         let pressed_at = Rc::new(Cell::new(Instant::now()));
+        let press_pos = Rc::new(Cell::new((0.0f64, 0.0f64)));
         legacy.connect_event(move |_, ev| {
             let Some(r) = w.upgrade() else {
                 return glib::Propagation::Proceed;
@@ -1262,13 +1367,24 @@ impl Reader {
                 gdk::EventType::ButtonPress => {
                     r.touch();
                     pressed_at.set(Instant::now());
+                    press_pos.set(pointer.get());
                 }
                 gdk::EventType::ButtonRelease => {
                     let btn = ev
                         .downcast_ref::<gdk::ButtonEvent>()
                         .map(|b| b.button())
                         .unwrap_or(1);
-                    if btn == 1 {
+                    let ((px, py), (x, y)) = (press_pos.get(), pointer.get());
+                    let still = (px - x).abs() < 6.0 && (py - y).abs() < 6.0;
+                    if btn == 1
+                        && still
+                        && let Some((block, preview)) = r.image_at(x, y)
+                    {
+                        let w2 = Rc::downgrade(&r);
+                        glib::idle_add_local_once(move || {
+                            with(&w2, |r| r.view_image(block, preview))
+                        });
+                    } else if btn == 1 {
                         let w2 = Rc::downgrade(&r);
                         glib::idle_add_local_once(move || with(&w2, |r| r.after_click()));
                     }
@@ -1287,6 +1403,88 @@ impl Reader {
             })
         });
         root.add_controller(motion);
+    }
+
+    /// The picture under the point (`x`, `y`) of the view, if any: its block and the texture drawn there.
+    fn image_at(&self, x: f64, y: f64) -> Option<(i32, Option<gdk::Texture>)> {
+        let (bx, by) =
+            self.view
+                .window_to_buffer_coords(gtk::TextWindowType::Widget, x as i32, y as i32);
+        let it = self.view.iter_at_location(bx, by)?;
+        let mut before = it;
+        before.backward_char();
+        for cand in [it, before] {
+            let Some(p) = cand.paintable() else { continue };
+            let r = self.view.iter_location(&cand);
+            let w = p.intrinsic_width().max(r.width());
+            if bx >= r.x() && bx < r.x() + w && by >= r.y() && by < r.y() + r.height() {
+                let (b, _) = self.block_pos(cand.offset());
+                use gtk::subclass::prelude::ObjectSubclassIsExt;
+                let tex = p
+                    .downcast_ref::<ScaledPaintable>()
+                    .and_then(|sp| sp.imp().texture.borrow().clone());
+                return Some((b, tex));
+            }
+        }
+        None
+    }
+
+    /// Clicks the `n`th picture of the chapter at the middle of where it's drawn (scrolling to it first).
+    pub fn dev_picture(self: &Rc<Self>, n: usize) {
+        let Some(b) = self
+            .chapter()
+            .blocks
+            .iter()
+            .enumerate()
+            .filter(|(_, b)| b.kind == IMAGE)
+            .nth(n)
+            .map(|(i, _)| i as i32)
+        else {
+            eprintln!("gbook dev: no picture {n}");
+            return;
+        };
+        let r = self.view.iter_location(&self.iter_at(b, 0));
+        let (x, y) = self.view.buffer_to_window_coords(
+            gtk::TextWindowType::Widget,
+            r.x() + r.width() / 2,
+            r.y() + r.height() / 2,
+        );
+        match self.image_at(x as f64, y as f64) {
+            Some((block, preview)) => self.view_image(block, preview),
+            None => eprintln!("gbook dev: picture {n} (block {b}) not hit at {x},{y}"),
+        }
+    }
+
+    /// Opens the chapter's pictures full window, at the one in block `block`.
+    fn view_image(&self, block: i32, preview: Option<gdk::Texture>) {
+        if self.buffer().has_selection() {
+            return;
+        }
+        let dir = self.app.paths.images_dir(&self.book_id);
+        let pictures: Vec<(i32, std::path::PathBuf)> = self
+            .chapter()
+            .blocks
+            .iter()
+            .enumerate()
+            .filter(|(_, b)| b.kind == IMAGE && b.src.as_deref().is_some_and(|s| !s.is_empty()))
+            .map(|(i, b)| (i as i32, dir.join(b.src.as_deref().unwrap_or(""))))
+            .collect();
+        let start = pictures.iter().position(|(i, _)| *i == block).unwrap_or(0);
+        let title = self
+            .app
+            .data()
+            .books
+            .iter()
+            .find(|b| b.id == self.book_id)
+            .map(|b| b.title.clone())
+            .unwrap_or_else(|| "GBook".into());
+        crate::imageview::open(
+            &self.app,
+            pictures.into_iter().map(|(_, p)| p).collect(),
+            start,
+            preview,
+            &title,
+        );
     }
 
     /// Selects UTF-16 range `start..end` of block `b` and acts as if the mouse had just made that selection.
@@ -1668,8 +1866,103 @@ impl Reader {
                 reaction: None,
             });
         }
+        if let Some((a, e)) = self.resume_mark.get()
+            && self.resume_alpha.get() > 0.0
+        {
+            let accent = self.app.colors().accent;
+            marks.push(crate::pageview::Mark {
+                start: a,
+                end: e,
+                fill: Some(accent.rgba((0.3 * self.resume_alpha.get()) as f32)),
+                underline: None,
+                thin: false,
+                reaction: None,
+            });
+        }
         let px = s.font_size.clamp(MIN_FONT, MAX_FONT);
         self.view.set_marks(marks, px);
+    }
+
+    /// Buffer range of the place reading stopped: the tracker's word or sentence when any of it is on the
+    /// page, else the last whole line on the page.
+    fn resume_range(&self) -> Option<(i32, i32)> {
+        let s = self.settings();
+        if s.tracker
+            && let Some((b, u)) = self.track.get()
+            && self.track_on_page(b, u)
+            && let Some(&(a, e)) = self.units_of(b).get(u)
+        {
+            return Some((self.iter_at(b, a).offset(), self.iter_at(b, e).offset()));
+        }
+        let lower = self.scroller.height() as f64 - BOTTOM_PAD as f64;
+        let (mut it, top, mut bot) = self.display_line(self.to_buffer_y(lower));
+        // Only a line that fits on the page: else the one above it.
+        if self.to_widget_y(bot) > lower + 0.5 {
+            if self.to_widget_y(top) <= TOP_PAD as f64 {
+                return None;
+            }
+            let (prev, _, pb) = self.display_line(top - 2);
+            it = prev;
+            bot = pb;
+        }
+        if self.to_widget_y(bot) <= TOP_PAD as f64 {
+            return None;
+        }
+        let mut end = it;
+        self.view.forward_display_line_end(&mut end);
+        let text = it.text(&end);
+        // Pictures and blank lines have nothing to wash.
+        if text.trim().is_empty() || text.contains('\u{FFFC}') {
+            return None;
+        }
+        Some((it.offset(), end.offset()))
+    }
+
+    /// Washes where reading stopped in the accent colour: in over a third of a second, a few seconds on
+    /// screen, then out. Waits a moment first for the saved position to settle.
+    fn request_resume_mark(self: &Rc<Self>) {
+        let seq = self.resume_gen.get() + 1;
+        self.resume_gen.set(seq);
+        let w = Rc::downgrade(self);
+        glib::timeout_add_local_once(Duration::from_millis(450), move || {
+            with(&w, |r| {
+                if r.resume_gen.get() != seq {
+                    return;
+                }
+                let Some(range) = r.resume_range() else {
+                    return;
+                };
+                r.resume_mark.set(Some(range));
+                let start = Instant::now();
+                let w = Rc::downgrade(r);
+                r.view.add_tick_callback(move |_, _| {
+                    let Some(r) = w.upgrade() else {
+                        return glib::ControlFlow::Break;
+                    };
+                    if r.resume_gen.get() != seq {
+                        return glib::ControlFlow::Break;
+                    }
+                    let t = start.elapsed().as_secs_f64();
+                    let a = if t < 0.35 {
+                        t / 0.35
+                    } else if t < 2.95 {
+                        1.0
+                    } else {
+                        (1.0 - (t - 2.95) / 0.9).max(0.0)
+                    };
+                    r.resume_alpha.set(a);
+                    if a <= 0.0 {
+                        r.resume_mark.set(None);
+                    }
+                    r.refresh_marks();
+                    if a <= 0.0 {
+                        glib::ControlFlow::Break
+                    } else {
+                        glib::ControlFlow::Continue
+                    }
+                });
+            })
+        });
     }
 
     /// The tracker's steps in paragraph `b`: its words or sentences.
@@ -1693,23 +1986,51 @@ impl Reader {
         Some((top, top + r.height() as f64))
     }
 
-    /// Whether stepping should go on from (b, u) rather than restart at the top of the page.
+    /// View-coordinate top of the first line of unit `u` of paragraph `b`, and top and bottom of its last line.
+    fn unit_span(&self, b: i32, u: usize) -> Option<(f64, f64, f64)> {
+        let &(a, e) = self.units_of(b).get(u)?;
+        let first = self.view.iter_location(&self.iter_at(b, a));
+        let last = self.view.iter_location(&self.iter_at(b, (e - 1).max(a)));
+        let top = self.to_widget_y(first.y());
+        let last_top = self.to_widget_y(last.y());
+        Some((top, last_top, last_top + last.height() as f64))
+    }
+
+    /// Whether any of (b, u) is on screen, so stepping goes on from it rather than restarting at the top of
+    /// the page.
     fn track_on_page(&self, b: i32, u: usize) -> bool {
         let h = self.scroller.height() as f64;
-        match self.unit_line(b, u) {
-            Some((top, bot)) => bot > TOP_PAD as f64 - 2.0 && top < h - BOTTOM_PAD as f64 + 2.0,
+        match self.unit_span(b, u) {
+            Some((top, _, bot)) => bot > TOP_PAD as f64 - 2.0 && top < h - BOTTOM_PAD as f64 + 2.0,
             None => false,
         }
     }
 
+    /// Whether (b, u) is cut by the bottom edge of the page (`forward`) or the top one, the rest of it off screen.
+    fn runs_off(&self, b: i32, u: usize, forward: bool) -> bool {
+        let Some((top, last_top, bot)) = self.unit_span(b, u) else {
+            return false;
+        };
+        let (upper, lower) = (
+            TOP_PAD as f64,
+            self.scroller.height() as f64 - BOTTOM_PAD as f64,
+        );
+        if forward {
+            top < lower && bot > lower + 0.5
+        } else {
+            top < upper - 0.5 && last_top >= upper - 0.5
+        }
+    }
+
+    /// First unit with any part on the page, including one carried over from the page before.
     fn first_unit_on_page(&self) -> Option<(i32, usize)> {
         let (it, _) = self.view.line_at_y(self.to_buffer_y(TOP_PAD as f64));
         let (first, _) = self.block_pos(it.offset());
         let n = self.chapter().blocks.len() as i32;
         for b in first..n.min(first + 40) {
             for u in 0..self.units_of(b).len() {
-                if let Some((top, _)) = self.unit_line(b, u)
-                    && top >= TOP_PAD as f64 - 0.5
+                if let Some((_, last_top, _)) = self.unit_span(b, u)
+                    && last_top >= TOP_PAD as f64 - 0.5
                 {
                     return Some((b, u));
                 }
@@ -1721,6 +2042,30 @@ impl Reader {
     /// Moves the tracker one word or sentence; keeps it on screen by turning or scrolling the page.
     pub fn step_track(self: &Rc<Self>, forward: bool) -> bool {
         self.touch();
+        // A sentence split across the page edge takes two steps: the first brings its other half into view and
+        // keeps the marker on it, so the half still to read isn't skipped.
+        if let Some((b, u)) = self.track.get().filter(|&(b, u)| self.track_on_page(b, u))
+            && self.runs_off(b, u, forward)
+        {
+            if self.app.data().settings.page_mode == 1 {
+                self.turn(forward);
+            } else if let Some((top, _, bot)) = self.unit_span(b, u) {
+                // Never past lines not yet seen: at most a screen less two lines.
+                let line = (bot - top).max(1.0).min(self.page_height() / 4.0);
+                let most = (self.page_height() - 2.0 * line).max(line);
+                let lower = self.scroller.height() as f64 - BOTTOM_PAD as f64;
+                let by = if forward {
+                    (bot - lower + line)
+                        .max(top - (TOP_PAD as f64 + self.page_height() * 0.3))
+                        .min(most)
+                } else {
+                    (top - (TOP_PAD as f64 + self.page_height() * 0.3)).max(-most)
+                };
+                let adj = self.scroller.vadjustment();
+                animate_to(&self.scroller, (adj.value() + by).max(0.0));
+            }
+            return true;
+        }
         let next = match self.track.get().filter(|&(b, u)| self.track_on_page(b, u)) {
             None => self.first_unit_on_page(),
             Some((b, u)) => {
@@ -1745,6 +2090,7 @@ impl Reader {
         };
         let Some((b, u)) = next else { return false };
         self.track.set(Some((b, u)));
+        self.save_track();
         self.refresh_marks();
         // Keep the marker in view.
         if let Some((top, bot)) = self.unit_line(b, u) {
@@ -1752,9 +2098,13 @@ impl Reader {
             let paged = self.app.data().settings.page_mode == 1;
             let below = bot > h - BOTTOM_PAD as f64;
             let above = top < TOP_PAD as f64;
-            if paged && (below || above) {
+            // In pages, a unit carried over from the page before counts as on this one: no turn back for it.
+            let last_above = self
+                .unit_span(b, u)
+                .is_some_and(|(_, last_top, _)| last_top < TOP_PAD as f64 - 0.5);
+            if paged && (below || last_above) {
                 self.turn(below);
-            } else if below || above {
+            } else if !paged && (below || above) {
                 let adj = self.scroller.vadjustment();
                 animate_to(
                     &self.scroller,

@@ -40,8 +40,12 @@ has no server of its own. Built: see `docs/sync.md` and the format in `shared/sy
 ## Android follow-ups
 - [ ] Scanned PDFs with no text layer (e.g. *Computer Lib*): show the rendered page images in reading mode
 - [ ] Soft fade at the ends of scrolling chapter names
-- [ ] Desktop parity for the new reader bar (search, Aa, contents, ···), the goal ring with the Today sheet, and
-  images in reflowed PDFs
+- [x] Pictures open full screen when tapped (both apps): zoom, pan, the chapter's other pictures, share or save
+- [x] Desktop parity: reader pill and goal ring with the Today popover (pages today too), pages per day in
+  Reading Activity, how long a book took on its page, the tracker's place saved with the position and a sentence
+  across the page edge taking two steps, the "where you stopped" wash, pinch to resize text
+- [ ] Desktop: the dictionary (Define in the selection popover; WordNet download or the online source)
+- [ ] Desktop: reflow PDFs into text (and their images), as on Android
 
 ## Desktop app (Rust): Linux and Windows
 

@@ -667,10 +667,66 @@ fn activity_sheet(app: &AppRc) {
     let pages_week: i32 = (0..7)
         .filter_map(|i| d.pages_log.get(&dates::key(today_n - i)))
         .sum();
-    col.append(&label(
-        &format!("{} pages read in the last 7 days", pages_week),
-        &["secondary"],
-    ));
+    let pages_today = d.pages_log.get(&dates::key(today_n)).copied().unwrap_or(0);
+    let mut pages_line = format!("{} in the last 7 days", plural(pages_week as usize, "page"));
+    if pages_week >= 7 {
+        pages_line += &format!(
+            " · about {} a day",
+            plural((pages_week / 7) as usize, "page")
+        );
+    }
+    pages_line += &format!(" · {pages_today} today");
+    col.append(&label(&pages_line, &["semibold"]));
+    // Each day of the week: its reading time as a bar, its pages read under it.
+    let days: Vec<i64> = (0..7).rev().map(|i| today_n - i).collect();
+    let times: Vec<i64> = days
+        .iter()
+        .map(|&x| d.reading_log.get(&dates::key(x)).copied().unwrap_or(0))
+        .collect();
+    let max = times.iter().copied().max().unwrap_or(0).max(15 * 60_000);
+    let chart = gtk::Box::new(gtk::Orientation::Horizontal, 10);
+    chart.set_homogeneous(true);
+    chart.set_margin_top(6);
+    chart.set_margin_bottom(6);
+    for (i, &day) in days.iter().enumerate() {
+        let c = vbox(4);
+        let slot = gtk::Box::new(gtk::Orientation::Vertical, 0);
+        slot.set_size_request(-1, 64);
+        let bar = gtk::Box::new(gtk::Orientation::Vertical, 0);
+        bar.add_css_class("daybar");
+        if i == 6 {
+            bar.add_css_class("today");
+        }
+        if times[i] == 0 {
+            bar.add_css_class("empty");
+        }
+        bar.set_size_request(
+            18,
+            ((times[i] as f32 / max as f32 * 64.0).round() as i32).max(4),
+        );
+        bar.set_halign(gtk::Align::Center);
+        bar.set_valign(gtk::Align::End);
+        bar.set_vexpand(true);
+        bar.set_tooltip_text(Some(&format_duration(times[i])));
+        slot.append(&bar);
+        c.append(&slot);
+        let dl = label(
+            dates::narrow_weekday(day),
+            &["small", if i == 6 { "bold" } else { "text2" }],
+        );
+        dl.set_xalign(0.5);
+        c.append(&dl);
+        let n = d.pages_log.get(&dates::key(day)).copied().unwrap_or(0);
+        let pl = label(
+            &if n > 0 { n.to_string() } else { "–".into() },
+            &["small", "semibold", if i == 6 { "accent" } else { "text2" }],
+        );
+        pl.set_xalign(0.5);
+        pl.set_tooltip_text(Some(&plural(n.max(0) as usize, "page")));
+        c.append(&pl);
+        chart.append(&c);
+    }
+    col.append(&chart);
     col.append(&label("This week", &["section-title"]));
     if week.is_empty() {
         col.append(&label("No reading in the last 7 days yet.", &["secondary"]));

@@ -36,11 +36,13 @@ import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.collectAsState
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
+import androidx.compose.runtime.saveable.listSaver
 import androidx.compose.runtime.saveable.rememberSaveable
 import androidx.compose.runtime.setValue
 import androidx.compose.runtime.mutableStateListOf
 import androidx.compose.runtime.remember
 import androidx.compose.runtime.saveable.rememberSaveableStateHolder
+import androidx.compose.runtime.snapshots.SnapshotStateList
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.unit.dp
@@ -52,6 +54,7 @@ import com.gbook.ui.components.panel
 import com.gbook.ui.screens.BookHighlightsScreen
 import com.gbook.ui.screens.BookSheet
 import com.gbook.ui.screens.WelcomeFlow
+import com.gbook.ui.theme.reapplyBarIcons
 import com.gbook.ui.screens.CollectionScreen
 import com.gbook.ui.screens.HomeScreen
 import com.gbook.ui.screens.PdfScreen
@@ -69,7 +72,29 @@ sealed interface Route {
     data class Reader(val id: String, val chapter: Int? = null, val block: Int? = null) : Route { override val key = "reader/$id/$chapter/$block" }
     data class Pdf(val id: String) : Route { override val key = "pdf/$id" }
     data class Collection(val id: String) : Route { override val key = "collection/$id" }
+
+    companion object {
+        /** The route saved as [key]. A book reopens at its saved reading position, not the place it was first jumped to. */
+        fun fromKey(key: String): Route? {
+            val parts = key.split("/")
+            val id = parts.getOrNull(1).orEmpty()
+            return when (parts[0]) {
+                "home" -> Home
+                "highlights" -> Highlights(id)
+                "reader" -> Reader(id)
+                "pdf" -> Pdf(id)
+                "collection" -> Collection(id)
+                else -> null
+            }
+        }
+    }
 }
+
+/** Keeps the open screens across the Activity being recreated or the process being killed in the background. */
+private val StackSaver = listSaver<SnapshotStateList<Route>, String>(
+    save = { stack -> stack.map { it.key } },
+    restore = { keys -> mutableStateListOf<Route>().apply { addAll(keys.mapNotNull(Route::fromKey)) } },
+)
 
 /** [details] opens a book's options sheet over whatever screen is showing. */
 class Nav(val push: (Route) -> Unit, val pop: () -> Unit, val details: (String) -> Unit) {
@@ -86,10 +111,12 @@ class MainActivity : ComponentActivity() {
         installSplashScreen().setOnExitAnimationListener { splash ->
             // Let the book finish opening (it's short), then lift the icon a little as the splash fades away.
             val left = (splash.iconAnimationStartMillis + splash.iconAnimationDurationMillis - SystemClock.uptimeMillis()).coerceIn(0, 500)
-            splash.iconView.animate().setStartDelay(left).setDuration(260).scaleX(1.12f).scaleY(1.12f).alpha(0f)
-                .setInterpolator(AccelerateInterpolator()).start()
+            // Returning to a task whose process Android killed, the system splash has no icon and iconView throws.
+            runCatching { splash.iconView }.getOrNull()?.animate()?.setStartDelay(left)?.setDuration(260)?.scaleX(1.12f)?.scaleY(1.12f)?.alpha(0f)
+                ?.setInterpolator(AccelerateInterpolator())?.start()
             splash.view.animate().setStartDelay(left + 60).setDuration(260).alpha(0f)
-                .withEndAction { splash.remove() }.start()
+                // Removing the splash resets the bar icons from the XML theme; put the app's choice back.
+                .withEndAction { splash.remove(); window.reapplyBarIcons() }.start()
         }
         enableEdgeToEdge()
         super.onCreate(savedInstanceState)
@@ -123,7 +150,7 @@ class MainActivity : ComponentActivity() {
 
 @Composable
 fun App(vm: AppViewModel, pendingOpen: MutableStateFlow<Uri?>, pendingBook: MutableStateFlow<String?>) {
-    val stack = remember { mutableStateListOf<Route>(Route.Home) }
+    val stack = rememberSaveable(saver = StackSaver) { mutableStateListOf<Route>(Route.Home) }
     var detailsFor by rememberSaveable { mutableStateOf<String?>(null) }
     val nav = remember {
         Nav(push = { stack.add(it) }, pop = { if (stack.size > 1) stack.removeAt(stack.lastIndex) }, details = { detailsFor = it })

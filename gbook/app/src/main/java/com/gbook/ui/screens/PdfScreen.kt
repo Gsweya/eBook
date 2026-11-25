@@ -37,6 +37,7 @@ import androidx.compose.foundation.layout.statusBars
 import androidx.compose.foundation.layout.statusBarsPadding
 import androidx.compose.foundation.layout.width
 import androidx.compose.foundation.layout.widthIn
+import androidx.compose.foundation.layout.windowInsetsTopHeight
 import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.lazy.rememberLazyListState
 import androidx.compose.foundation.rememberScrollState
@@ -91,6 +92,7 @@ import com.gbook.ui.components.GoalBanner
 import com.gbook.ui.theme.LocalG
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.FlowPreview
+import kotlinx.coroutines.delay
 import kotlinx.coroutines.flow.debounce
 import kotlinx.coroutines.launch
 import kotlinx.coroutines.sync.Mutex
@@ -177,6 +179,14 @@ private fun PdfPages(vm: AppViewModel, id: String, onBack: () -> Unit, reflowLab
         }
     }
 
+    // As in the text reader, a page counts as read once it has stayed on screen for a few seconds.
+    val countedPages = remember { HashSet<Int>() }
+    val currentPage by remember(list) { derivedStateOf { list.firstVisibleItemIndex } }
+    LaunchedEffect(currentPage) {
+        delay(4_000)
+        if (countedPages.add(currentPage)) vm.addPagesRead(id)
+    }
+
     fun setZoom(z: Float, focusX: Float? = null, viewportW: Float = 0f) {
         val old = zoom
         val nz = z.coerceIn(1f, 5f)
@@ -238,6 +248,8 @@ private fun PdfPages(vm: AppViewModel, id: String, onBack: () -> Unit, reflowLab
             }
         }
 
+        // Safe area: pages never scroll under the status bar, where white paper would hide light icons in dark mode.
+        Box(Modifier.fillMaxWidth().windowInsetsTopHeight(WindowInsets.statusBars).background(pageBg))
         AnimatedVisibility(chrome, enter = fadeIn(), exit = fadeOut()) {
             Row(Modifier.fillMaxWidth().statusBarsPadding().padding(horizontal = 12.dp, vertical = 6.dp), verticalAlignment = Alignment.CenterVertically) {
                 IconCircle(Icons.Rounded.ArrowBackIosNew, "Back", onBack, size = 44.dp)

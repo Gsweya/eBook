@@ -36,6 +36,7 @@ import androidx.compose.ui.Modifier
 import androidx.compose.ui.geometry.Offset
 import androidx.compose.ui.geometry.Size
 import androidx.compose.ui.graphics.Color
+import com.gbook.ui.theme.BarIconsOver
 import androidx.compose.ui.graphics.ImageBitmap
 import androidx.compose.ui.graphics.Path
 import androidx.compose.ui.graphics.PathFillType
@@ -78,6 +79,7 @@ fun AvatarCropper(uri: Uri, onDone: (Bitmap) -> Unit, onCancel: () -> Unit) {
     val ctx = LocalContext.current
     val src by produceState<Bitmap?>(null, uri) { value = withContext(Dispatchers.IO) { runCatching { decodeUpright(ctx, uri) }.getOrNull() } }
     Dialog(onCancel, DialogProperties(usePlatformDefaultWidth = false, decorFitsSystemWindows = false)) {
+        BarIconsOver(Color.Black)
         Box(Modifier.fillMaxSize().background(Color.Black)) {
             val bmp = src
             if (bmp == null) CircularProgressIndicator(Modifier.align(Alignment.Center), color = Color.White)

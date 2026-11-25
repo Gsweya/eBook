@@ -116,8 +116,10 @@ class Importer(private val ctx: Context, private val store: Store, private val s
     }
 
     /** Moves a reflow position from [old] text to the same PDF page in [new] text. */
-    private fun remap(pos: ReadingPosition, old: BookContent, new: BookContent): ReadingPosition {
-        val page = old.chapters.getOrNull(pos.chapter)?.blocks?.getOrNull(pos.item)?.page?.takeIf { it >= 0 } ?: return pos.copy(chapter = 0, item = 0, offset = 0)
+    private fun remap(old0: ReadingPosition, old: BookContent, new: BookContent): ReadingPosition {
+        // Paragraph numbers change with the new text, so the tracker's place no longer applies.
+        val pos = old0.copy(trackChapter = -1, trackBlock = -1, trackOff = 0)
+        val page = old.chapters.getOrNull(old0.chapter)?.blocks?.getOrNull(old0.item)?.page?.takeIf { it >= 0 } ?: return pos.copy(chapter = 0, item = 0, offset = 0)
         new.chapters.forEachIndexed { ci, ch ->
             val bi = ch.blocks.indexOfFirst { it.page >= page }
             if (bi >= 0) return pos.copy(chapter = ci, item = bi, offset = 0)

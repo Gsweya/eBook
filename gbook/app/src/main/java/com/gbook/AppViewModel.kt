@@ -214,6 +214,12 @@ class AppViewModel(app: Application) : AndroidViewModel(app) {
         if (it.position == pos && it.progress == p) it else it.copy(position = pos, progress = p, positionAt = now, finishedAt = finishedAt)
     }
 
+    /** Remembers where the reading tracker stands, so reopening the book shows it there again. */
+    fun saveTrack(id: String, chapter: Int, block: Int, off: Int) = store.updateBook(id) {
+        val pos = it.position.copy(trackChapter = chapter, trackBlock = block, trackOff = off)
+        if (it.position == pos) it else it.copy(position = pos, positionAt = System.currentTimeMillis())
+    }
+
     fun updateSettings(f: (ReaderSettings) -> ReaderSettings) = store.update { it.copy(settings = f(it.settings)) }
 
     fun reactBook(id: String, emoji: String) = store.updateBook(id) { b -> b.copy(reactions = toggle(b.reactions, b.myReaction, emoji), myReaction = if (b.myReaction == emoji) null else emoji) }

@@ -1,8 +1,14 @@
 package com.gbook.ui.components
 
+import android.content.ContentValues
 import android.content.Context
 import android.content.Intent
 import android.graphics.Bitmap
+import android.media.MediaScannerConnection
+import android.os.Build
+import android.os.Environment
+import android.provider.MediaStore
+import android.util.Log
 import androidx.compose.foundation.layout.ColumnScope
 import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.WindowInsets
@@ -33,7 +39,10 @@ import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import androidx.core.content.FileProvider
 import com.gbook.ui.theme.LocalG
+import kotlinx.coroutines.Dispatchers
+import kotlinx.coroutines.withContext
 import java.io.File
+import java.io.OutputStream
 
 /** Bottom sheet with the iOS 26 38dp top radius and a round close button (spec component 11). */
 @OptIn(ExperimentalMaterial3Api::class)
@@ -103,11 +112,73 @@ fun shareText(ctx: Context, text: String) {
     ctx.startActivity(Intent.createChooser(i, "Share"))
 }
 
-fun shareImage(ctx: Context, bitmap: Bitmap, text: String) {
+private fun Bitmap.writePng(out: OutputStream) {
+    val soft = if (config == Bitmap.Config.HARDWARE) copy(Bitmap.Config.ARGB_8888, false) else this
+    soft.compress(Bitmap.CompressFormat.PNG, 100, out)
+}
+
+/** Saves [bitmap] to the phone's Pictures/GBook folder; returns whether it worked. Android 9 and older need storage permission first. */
+suspend fun saveImage(ctx: Context, bitmap: Bitmap): Boolean =
+    saveToPictures(ctx, "GBook-${System.currentTimeMillis()}.png", "image/png") { bitmap.writePng(it) }
+
+/** Saves a copy of the image file [file] (a book's picture, as it came in the book) to Pictures/GBook. */
+suspend fun saveImageFile(ctx: Context, file: File): Boolean =
+    saveToPictures(ctx, "GBook-${System.currentTimeMillis()}.${file.extension.ifEmpty { "png" }.lowercase()}", imageMime(file)) { out ->
+        file.inputStream().use { it.copyTo(out) }
+    }
+
+/** The MIME type for an image file, from its extension. */
+fun imageMime(file: File): String = when (file.extension.lowercase()) {
+    "jpg", "jpeg" -> "image/jpeg"
+    "gif" -> "image/gif"
+    "webp" -> "image/webp"
+    "svg" -> "image/svg+xml"
+    "bmp" -> "image/bmp"
+    else -> "image/png"
+}
+
+private suspend fun saveToPictures(ctx: Context, name: String, mime: String, write: (OutputStream) -> Unit): Boolean = withContext(Dispatchers.IO) {
+    runCatching {
+        if (Build.VERSION.SDK_INT >= 29) {
+            val resolver = ctx.contentResolver
+            val values = ContentValues().apply {
+                put(MediaStore.Images.Media.DISPLAY_NAME, name)
+                put(MediaStore.Images.Media.MIME_TYPE, mime)
+                put(MediaStore.Images.Media.RELATIVE_PATH, "${Environment.DIRECTORY_PICTURES}/GBook")
+                put(MediaStore.Images.Media.IS_PENDING, 1)
+            }
+            val uri = resolver.insert(MediaStore.Images.Media.getContentUri(MediaStore.VOLUME_EXTERNAL_PRIMARY), values)
+                ?: error("MediaStore refused the image")
+            try {
+                resolver.openOutputStream(uri)!!.use(write)
+                resolver.update(uri, ContentValues().apply { put(MediaStore.Images.Media.IS_PENDING, 0) }, null, null)
+            } catch (e: Exception) {
+                resolver.delete(uri, null, null)
+                throw e
+            }
+        } else {
+            val dir = File(Environment.getExternalStoragePublicDirectory(Environment.DIRECTORY_PICTURES), "GBook").apply { mkdirs() }
+            val f = File(dir, name)
+            f.outputStream().use(write)
+            MediaScannerConnection.scanFile(ctx, arrayOf(f.path), arrayOf(mime), null)
+        }
+    }.onFailure { Log.w("GBook", "couldn't save image", it) }.isSuccess
+}
+
+/** Shares an image file from the book's own folder, without copying it. */
+fun shareImageFile(ctx: Context, file: File, text: String) {
+    val uri = FileProvider.getUriForFile(ctx, ctx.packageName + ".files", file)
+    val i = Intent(Intent.ACTION_SEND).setType(imageMime(file))
+        .putExtra(Intent.EXTRA_STREAM, uri)
+        .putExtra(Intent.EXTRA_TEXT, text)
+        .addFlags(Intent.FLAG_GRANT_READ_URI_PERMISSION)
+    ctx.startActivity(Intent.createChooser(i, "Share image"))
+}
+
+suspend fun shareImage(ctx: Context, bitmap: Bitmap, text: String) {
     val dir = File(ctx.cacheDir, "share").apply { mkdirs() }
     val f = File(dir, "gbook-post-${System.currentTimeMillis() % 100000}.png")
-    val soft = if (bitmap.config == Bitmap.Config.HARDWARE) bitmap.copy(Bitmap.Config.ARGB_8888, false) else bitmap
-    f.outputStream().use { soft.compress(Bitmap.CompressFormat.PNG, 100, it) }
+    withContext(Dispatchers.IO) { f.outputStream().use { bitmap.writePng(it) } }
     val uri = FileProvider.getUriForFile(ctx, ctx.packageName + ".files", f)
     val i = Intent(Intent.ACTION_SEND).setType("image/png")
         .putExtra(Intent.EXTRA_STREAM, uri)

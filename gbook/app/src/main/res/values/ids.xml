@@ -1,0 +1,5 @@
+<?xml version="1.0" encoding="utf-8"?>
+<resources>
+    <!-- Window tag holding the status/navigation bar icon colours (ui/theme/SystemBars.kt). -->
+    <item name="bar_icons" type="id" />
+</resources>

@@ -118,6 +118,11 @@ pub fn show(app: &AppRc, shell: &ShellRc, id: &str) {
             a.open(&bid, None);
         });
         col.append(&read);
+        if let Some(r) =
+            gbook_core::readthrough::read_through(&book, &d.book_days, today().0, local_day)
+        {
+            col.append(&read_through_card(&r));
+        }
 
         let hl = d.highlights.iter().filter(|h| h.book_id == id).count();
         let plan = d.plans.iter().find(|p| p.book_id == id).cloned();
@@ -225,6 +230,70 @@ pub fn show(app: &AppRc, shell: &ShellRc, id: &str) {
         col.append(&grid);
         content.append(&col);
     });
+}
+
+/// The local day number of a time in ms.
+fn local_day(ms: i64) -> i64 {
+    glib::DateTime::from_unix_local(ms / 1000)
+        .map(|t| dates::days_from_civil(t.year(), t.month() as u32, t.day_of_month() as u32))
+        .unwrap_or_else(|_| today().0)
+}
+
+/// How long the book took (or has taken so far): days from start to finish, the dates, and the time spent.
+fn read_through_card(r: &gbook_core::readthrough::ReadThrough) -> gtk::Widget {
+    let card = vbox(14);
+    card.add_css_class("card");
+    card.add_css_class("read-through");
+    card.set_margin_top(16);
+    let head = hbox(12);
+    let tile = gtk::Box::new(gtk::Orientation::Horizontal, 0);
+    tile.add_css_class("icon-tile");
+    tile.set_valign(gtk::Align::Center);
+    tile.set_halign(gtk::Align::Start);
+    let i = icon(
+        if r.finished() {
+            "check-circle"
+        } else {
+            "auto-stories"
+        },
+        21,
+    );
+    i.set_halign(gtk::Align::Center);
+    i.set_valign(gtk::Align::Center);
+    i.set_size_request(38, 38);
+    tile.append(&i);
+    head.append(&tile);
+    let titles = vbox(0);
+    titles.append(&label(&r.headline(), &["read-through-title"]));
+    titles.append(&label(&r.date_range(today().0), &["caption", "text2"]));
+    head.append(&titles);
+    card.append(&head);
+    let stats = gtk::Box::new(gtk::Orientation::Horizontal, 0);
+    stats.set_homogeneous(true);
+    let per_day = if r.reading_days > 0 {
+        format_duration(r.reading_ms / r.reading_days as i64)
+    } else {
+        "–".into()
+    };
+    for (v, l) in [
+        (format_duration(r.reading_ms), "reading time"),
+        (
+            r.reading_days.to_string(),
+            if r.reading_days == 1 {
+                "day read"
+            } else {
+                "days read"
+            },
+        ),
+        (per_day, "a reading day"),
+    ] {
+        let c = vbox(0);
+        c.append(&label(&v, &["semibold", "read-through-value"]));
+        c.append(&label(l, &["caption", "text2"]));
+        stats.append(&c);
+    }
+    card.append(&stats);
+    card.upcast()
 }
 
 /// One of the book's options as a solid card: icon, label and its current value.

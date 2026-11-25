@@ -11,6 +11,7 @@ mod booksheet;
 mod devtools;
 mod drive;
 mod feed;
+mod imageview;
 mod import;
 mod library;
 mod media;

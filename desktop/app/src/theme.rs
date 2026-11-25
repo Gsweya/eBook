@@ -628,6 +628,16 @@ popover > arrow {{ background: @sheet; }}
 .toast {{ background: @chrome; border-radius: 999px; padding: 12px 20px; margin-top: 14px;
   box-shadow: 0 6px 20px {shadow}, inset 0 0 0 1px {border}; }}
 
+/* Picture viewer: the book's picture over the whole window, on near black whatever the theme. */
+.image-viewer {{ background: rgba(0,0,0,0.95); }}
+.image-viewer .viewer-counter {{ color: rgba(255,255,255,0.85); font-size: 15px; font-weight: 600; }}
+.image-viewer button.circle, .image-viewer button.viewer-fit {{ background: rgba(38,38,40,0.92); color: white; box-shadow: inset 0 0 0 1px rgba(255,255,255,0.08); }}
+.image-viewer button.circle:hover, .image-viewer button.viewer-fit:hover {{ background: rgba(62,62,66,0.95); }}
+.image-viewer button.circle:disabled {{ color: rgba(255,255,255,0.3); background: rgba(38,38,40,0.6); }}
+.image-viewer button.viewer-fit {{ min-height: 44px; min-width: 64px; padding: 0 14px; border-radius: 999px; border: none; }}
+.image-viewer .viewer-zoom {{ font-size: 14px; font-weight: 600; }}
+.image-viewer .toast {{ background: rgba(38,38,40,0.92); color: white; box-shadow: none; }}
+
 /* Sheets: a centred card over a dimmed page. */
 .scrim {{ background: rgba(0,0,0,{scrim}); }}
 .sheet-panel {{ background: @sheet; color: @text; border-radius: 28px; box-shadow: 0 18px 50px rgba(0,0,0,0.35), inset 0 0 0 1px {border}; }}
@@ -831,6 +841,9 @@ button.emoji-button.on {{ background: alpha(@accent, 0.22); }}
 button.emoji-button:hover {{ background: mix(@fill, @text, 0.06); }}
 button.option-card {{ background: {card}; border-radius: 22px; padding: 16px; border: none; color: @text; box-shadow: inset 0 0 0 1px @separator; min-height: 0; }}
 button.option-card:hover {{ background: mix({card}, @text, 0.04); }}
+.read-through {{ padding: 18px; }}
+.read-through-title {{ font-family: "{DISPLAY}"; font-weight: 700; font-size: 20px; }}
+.read-through-value {{ font-size: 17px; }}
 button.option-card.danger .icon-tile {{ background: alpha(@destructive, 0.14); color: @destructive; }}
 button.option-card.danger .semibold {{ color: @destructive; }}
 button.primary.danger {{ background-image: none; background: @destructive; color: white; }}

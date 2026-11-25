@@ -44,6 +44,7 @@ import androidx.compose.material3.Icon
 import com.gbook.ui.components.Avatar
 import com.gbook.ui.components.GoalRing
 import com.gbook.ui.components.PillButton
+import com.gbook.ui.components.plural
 import com.gbook.ui.components.todayMs
 import com.gbook.ui.theme.GType
 import com.gbook.ui.theme.DisplaySerif
@@ -82,6 +83,10 @@ fun TodaySheet(vm: AppViewModel, book: Book, sessionMs: Long, onPlan: () -> Unit
                             else -> "${((goalMs - today + 59_999) / 60_000)} min to go · $goalMin min goal"
                         },
                         fontSize = 15.sp, color = if (reached) g.accent else g.text2, fontWeight = if (reached) FontWeight.SemiBold else FontWeight.Medium,
+                    )
+                    Text(
+                        plural(data.pagesLog[LocalDate.now().toString()] ?: 0, "page") + " today",
+                        fontSize = 17.sp, fontWeight = FontWeight.SemiBold, color = g.text, modifier = Modifier.padding(top = 2.dp),
                     )
                     Text("${formatDuration(sessionMs)} this sitting", fontSize = 15.sp, color = g.text2, modifier = Modifier.padding(top = 2.dp))
                 }
@@ -133,7 +138,16 @@ fun ReadingActivitySheet(vm: AppViewModel, onOpen: (Book) -> Unit, onDismiss: ()
                 },
                 fontSize = 16.sp, color = g.text2, modifier = Modifier.padding(start = 20.dp),
             )
-            if (days > 0) DayBars(dates, dates.map { data.readingLog[it.toString()] ?: 0L })
+            val pages = if (range == 2) data.pagesLog.values.sum() else dates.sumOf { data.pagesLog[it.toString()] ?: 0 }
+            Text(
+                buildString {
+                    append(plural(pages, "page"))
+                    if (days > 0) append(" · about ${plural(pages / days, "page")} a day")
+                    append(" · ${data.pagesLog[today.toString()] ?: 0} today")
+                },
+                fontSize = 16.sp, fontWeight = FontWeight.SemiBold, color = g.text, modifier = Modifier.padding(start = 20.dp, top = 2.dp),
+            )
+            if (days > 0) DayBars(dates, dates.map { data.readingLog[it.toString()] ?: 0L }, dates.map { data.pagesLog[it.toString()] ?: 0 })
 
             Text(
                 "MOST READ", fontSize = 14.sp, fontWeight = FontWeight.SemiBold, letterSpacing = 1.5.sp, color = g.text2,
@@ -171,9 +185,9 @@ fun ReadingActivitySheet(vm: AppViewModel, onOpen: (Book) -> Unit, onDismiss: ()
     }
 }
 
-/** Daily bars; weekday initials for a week, start and end dates for longer ranges. */
+/** Daily bars; weekday initials and each day's pages for a week, start and end dates for longer ranges. */
 @Composable
-private fun DayBars(dates: List<LocalDate>, values: List<Long>) {
+private fun DayBars(dates: List<LocalDate>, values: List<Long>, pages: List<Int>) {
     val g = LocalG.current
     val max = (values.maxOrNull() ?: 0L).coerceAtLeast(15 * 60_000L)
     val week = dates.size <= 7
@@ -197,6 +211,15 @@ private fun DayBars(dates: List<LocalDate>, values: List<Long>) {
                         d.dayOfWeek.getDisplayName(TextStyle.SHORT, Locale.getDefault()), fontSize = 12.sp,
                         color = if (i == dates.lastIndex) g.text else g.text2, modifier = Modifier.weight(1f),
                         textAlign = androidx.compose.ui.text.style.TextAlign.Center,
+                    )
+                }
+            }
+            Row(Modifier.fillMaxWidth().padding(top = 2.dp), horizontalArrangement = Arrangement.spacedBy(10.dp)) {
+                pages.forEachIndexed { i, n ->
+                    Text(
+                        if (n > 0) "$n" else "–", fontSize = 12.sp, fontWeight = FontWeight.SemiBold,
+                        color = if (i == pages.lastIndex) g.accent else g.text2, modifier = Modifier.weight(1f),
+                        textAlign = androidx.compose.ui.text.style.TextAlign.Center, maxLines = 1,
                     )
                 }
             }

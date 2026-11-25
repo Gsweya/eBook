@@ -135,6 +135,25 @@ fn step(shell: ShellRc, steps: Rc<Vec<String>>, i: usize) {
                 }
             }
         }
+        "book" => {
+            // book:<title words> opens that book's page.
+            let id = shell
+                .app
+                .data()
+                .books
+                .iter()
+                .find(|b| b.title.to_lowercase().contains(&arg.to_lowercase()))
+                .map(|b| b.id.clone());
+            if let Some(id) = id {
+                crate::booksheet::show(&shell.app, &shell, &id);
+            }
+        }
+        "picture" => {
+            // picture:N clicks the Nth picture of the chapter (0 = first) where it is drawn on screen.
+            if let Some(r) = crate::reader::CURRENT.with(|c| c.borrow().upgrade()) {
+                r.dev_picture(arg.parse().unwrap_or(0));
+            }
+        }
         "paint" => {
             // paint:N turns the tracker wheel N steps as one highlighting turn.
             if let Some(r) = crate::reader::CURRENT.with(|c| c.borrow().upgrade()) {

@@ -1,10 +1,5 @@
 package com.gbook.ui.theme
 
-import android.app.Activity
-import androidx.compose.runtime.SideEffect
-import androidx.compose.ui.platform.LocalView
-import androidx.core.view.WindowCompat
-
 import androidx.compose.foundation.isSystemInDarkTheme
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.Typography
@@ -169,15 +164,7 @@ fun GBookTheme(accent: String, appearance: Int, amoled: Boolean, content: @Compo
     val scheme = if (dark) darkColorScheme(primary = g.accent, onPrimary = g.onAccent, surface = g.surface, background = g.bg)
     else lightColorScheme(primary = g.accent, onPrimary = g.onAccent, surface = g.surface, background = g.bg)
     // Status/navigation bar icons follow the app's mode, which can differ from the system's.
-    val view = LocalView.current
-    SideEffect {
-        (view.context as? Activity)?.window?.let { w ->
-            WindowCompat.getInsetsController(w, view).apply {
-                isAppearanceLightStatusBars = !dark
-                isAppearanceLightNavigationBars = !dark
-            }
-        }
-    }
+    AppBarIcons(dark)
     CompositionLocalProvider(LocalG provides g) {
         MaterialTheme(colorScheme = scheme, typography = AppTypography, content = content)
     }

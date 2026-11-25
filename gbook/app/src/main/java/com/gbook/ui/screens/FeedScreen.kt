@@ -1,7 +1,16 @@
 package com.gbook.ui.screens
 
+import android.Manifest
+import android.content.pm.PackageManager
+import android.os.Build
+import android.util.Log
+import androidx.activity.compose.rememberLauncherForActivityResult
+import androidx.activity.result.contract.ActivityResultContracts
+import androidx.compose.material.icons.rounded.Download
+import androidx.core.content.ContextCompat
 import com.gbook.ui.components.plural
 import com.gbook.ui.components.bottomBarClearance
+import com.gbook.ui.components.saveImage
 import androidx.compose.animation.AnimatedVisibility
 import androidx.compose.animation.core.Spring
 import androidx.compose.animation.core.animateFloatAsState
@@ -91,6 +100,7 @@ import com.gbook.ui.theme.GType
 import com.gbook.ui.theme.DisplaySerif
 import com.gbook.ui.theme.LocalG
 import com.gbook.ui.theme.QuoteSerif
+import kotlinx.coroutines.CancellationException
 import kotlinx.coroutines.delay
 import kotlinx.coroutines.launch
 
@@ -161,6 +171,23 @@ fun PostCard(vm: AppViewModel, post: Post, book: Book, onOpen: () -> Unit) {
     var burst by remember { mutableStateOf(false) }
     var picker by remember { mutableStateOf(false) }
     LaunchedEffect(burst) { if (burst) { delay(700); burst = false } }
+    /** Hands the slide on screen to [use]. A failure here must only cost the image, not the app. */
+    fun withSlide(use: suspend (android.graphics.Bitmap) -> Unit) = scope.launch {
+        try {
+            use(layer.toImageBitmap().asAndroidBitmap())
+        } catch (e: CancellationException) {
+            throw e
+        } catch (e: Exception) {
+            Log.w("GBook", "couldn't capture post image", e)
+            vm.toast("Couldn't make the image")
+        }
+    }
+    fun download() = withSlide { bmp ->
+        vm.toast(if (saveImage(ctx, bmp)) "Saved to Pictures/GBook" else "Couldn't save the image")
+    }
+    val storagePermission = rememberLauncherForActivityResult(ActivityResultContracts.RequestPermission()) { granted ->
+        if (granted) download() else vm.toast("GBook needs storage access to save images")
+    }
 
     Column(Modifier.padding(bottom = 22.dp)) {
         Row(Modifier.padding(horizontal = 16.dp, vertical = 10.dp).clickable(onClick = onOpen), verticalAlignment = Alignment.CenterVertically) {
@@ -204,10 +231,14 @@ fun PostCard(vm: AppViewModel, post: Post, book: Book, onOpen: () -> Unit) {
                 if (picker) ReactionPicker(onPick = { vm.reactPost(post.id, it); picker = false }, onDismiss = { picker = false })
             }
             ActionIcon(Icons.Rounded.IosShare, "Share", g.text) {
-                scope.launch {
-                    val bmp = layer.toImageBitmap().asAndroidBitmap()
+                withSlide { bmp ->
                     shareImage(ctx, bmp, "“${post.slides.getOrElse(pager.currentPage) { post.slides.first() }}” — ${book.title}, ${book.author} · via GBook")
                 }
+            }
+            ActionIcon(Icons.Rounded.Download, "Download image", g.text) {
+                val allowed = Build.VERSION.SDK_INT >= 29 ||
+                    ContextCompat.checkSelfPermission(ctx, Manifest.permission.WRITE_EXTERNAL_STORAGE) == PackageManager.PERMISSION_GRANTED
+                if (allowed) download() else storagePermission.launch(Manifest.permission.WRITE_EXTERNAL_STORAGE)
             }
             Spacer(Modifier.weight(1f))
             ActionIcon(Icons.Rounded.DeleteOutline, "Remove post", g.text2) { vm.deletePost(post.id) }

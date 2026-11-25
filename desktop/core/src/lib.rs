@@ -9,6 +9,7 @@ pub mod library;
 pub mod model;
 pub mod plans;
 pub mod posts;
+pub mod readthrough;
 pub mod store;
 pub mod sync;
 pub mod tracker;
